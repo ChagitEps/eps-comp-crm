@@ -1,0 +1,124 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { Edit, UserCheck, UserX, Mail } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { TechnicianForm } from './technician-form'
+import { toggleTechnicianActive } from '@/app/actions/team'
+import type { Profile } from '@/types'
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'מנהל מערכת',
+  technician_senior: 'טכנאי ראשי',
+  technician_junior: 'טכנאי',
+}
+
+interface TechnicianListProps {
+  technicians: Profile[]
+  currentUserId: string
+}
+
+export function TechnicianList({ technicians, currentUserId }: TechnicianListProps) {
+  const [editing, setEditing] = useState<Profile | null>(null)
+  const [, startTransition] = useTransition()
+
+  function handleToggle(profileId: string, currentlyActive: boolean) {
+    startTransition(async () => {
+      await toggleTechnicianActive(profileId, !currentlyActive)
+    })
+  }
+
+  return (
+    <>
+      <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+        {technicians.map((tech) => {
+          const isSelf = tech.id === currentUserId
+          return (
+            <div key={tech.id} className="flex items-center gap-4 p-4">
+              {/* Avatar placeholder */}
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-sm font-semibold text-primary">
+                  {tech.full_name.charAt(0)}
+                </span>
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium">{tech.full_name}</p>
+                  {isSelf && (
+                    <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">אתה</span>
+                  )}
+                  <StatusBadge
+                    label={ROLE_LABELS[tech.role] ?? tech.role}
+                    colorClass={
+                      tech.role === 'admin'
+                        ? 'bg-purple-100 text-purple-700'
+                        : tech.role === 'technician_senior'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }
+                  />
+                  {!tech.is_active && (
+                    <StatusBadge label="לא פעיל" colorClass="bg-red-100 text-red-700" />
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                  {tech.phone && <span dir="ltr">{tech.phone}</span>}
+                  {tech.hourly_rate && <span>₪{tech.hourly_rate}/שעה</span>}
+                </div>
+              </div>
+
+              {/* Actions — not for self */}
+              {!isSelf && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditing(tech)}
+                    className="text-muted-foreground hover:text-foreground"
+                    title="ערוך"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                  </Button>
+
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className={tech.is_active ? 'text-muted-foreground hover:text-orange-600' : 'text-muted-foreground hover:text-emerald-600'}
+                        title={tech.is_active ? 'השהה משתמש' : 'הפעל משתמש'}
+                      >
+                        {tech.is_active
+                          ? <UserX className="h-3.5 w-3.5" />
+                          : <UserCheck className="h-3.5 w-3.5" />}
+                      </Button>
+                    }
+                    title={tech.is_active ? 'השהיית משתמש' : 'הפעלת משתמש'}
+                    description={
+                      tech.is_active
+                        ? `האם להשהות את ${tech.full_name}? הוא לא יוכל להתחבר למערכת.`
+                        : `האם להפעיל מחדש את ${tech.full_name}?`
+                    }
+                    confirmLabel={tech.is_active ? 'השהה' : 'הפעל'}
+                    variant={tech.is_active ? 'destructive' : 'default'}
+                    onConfirm={() => handleToggle(tech.id, tech.is_active)}
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <TechnicianForm
+        technician={editing ?? undefined}
+        open={!!editing}
+        onClose={() => setEditing(null)}
+      />
+    </>
+  )
+}
