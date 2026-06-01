@@ -42,6 +42,9 @@ export type BillingStatus =
   | 'paid'
   | 'open_debt'
 
+// Billing status on visits (from migration 006)
+export type VisitBillingStatus = 'pending' | 'invoiced' | 'paid'
+
 export type VisitType =
   | 'computing'
   | 'infrastructure'
@@ -229,7 +232,10 @@ export interface Visit {
   work_description: string | null
   work_cost: number
   equipment_cost: number
+  fixed_cost: number
   total_cost: number
+  billing_status: VisitBillingStatus
+  hourly_rate_snapshot: number | null
   customer_signature_url: string | null
   notes: string | null
   created_at: string
@@ -509,6 +515,18 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   OUT: 'הוצאה',
   RETURN: 'החזרה',
   ADJUSTMENT: 'תיקון מלאי',
+}
+
+export const VISIT_BILLING_STATUS_LABELS: Record<VisitBillingStatus, string> = {
+  pending: 'ממתין לחיוב',
+  invoiced: 'חשבונית נשלחה',
+  paid: 'שולם',
+}
+
+export const VISIT_BILLING_STATUS_COLORS: Record<VisitBillingStatus, string> = {
+  pending: 'bg-orange-100 text-orange-700',
+  invoiced: 'bg-blue-100 text-blue-700',
+  paid: 'bg-green-100 text-green-700',
 }
 
 export const MOVEMENT_TYPE_COLORS: Record<MovementType, string> = {
