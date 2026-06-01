@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { GoogleSyncButton } from '@/components/visits/google-sync-button'
+import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS } from '@/types'
 import type { VisitType, VisitStatus } from '@/types'
 import { cn } from '@/lib/utils'
@@ -154,6 +155,14 @@ export default async function VisitDetailPage({ params }: PageProps) {
           <h2 className="text-sm font-semibold text-muted-foreground">הערות</h2>
           <p className="text-sm whitespace-pre-wrap">{visit.notes}</p>
         </div>
+      )}
+
+      {/* AI Summary — always available */}
+      {ticket?.id && (
+        <AiSummaryPanel
+          visitId={id}
+          ticketId={ticket.id}
+        />
       )}
 
       {/* Costs */}

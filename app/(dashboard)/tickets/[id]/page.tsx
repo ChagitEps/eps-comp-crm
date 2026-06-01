@@ -8,6 +8,7 @@ import { TicketStatusSelect } from '@/components/tickets/ticket-status-select'
 import { DeleteTicketButton } from '@/components/tickets/delete-ticket-button'
 import { TicketEquipmentSelector } from '@/components/equipment/ticket-equipment-selector'
 import { TicketAttachments } from '@/components/files/ticket-attachments'
+import { AiChecklistPanel } from '@/components/visits/ai-checklist-panel'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
@@ -178,6 +179,15 @@ export default async function TicketDetailPage({ params }: PageProps) {
           </span>
         </div>
       </div>
+
+      {/* AI Checklist — נטען אוטומטית בפתיחת קריאה */}
+      {customer?.id && (
+        <AiChecklistPanel
+          ticketId={id}
+          customerId={customer.id}
+          autoGenerate
+        />
+      )}
 
       {/* Description */}
       {(ticket.description || ticket.internal_notes) && (
