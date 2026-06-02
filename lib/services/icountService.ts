@@ -26,7 +26,7 @@ const VAT_PERCENT    = 17
 
 // ── Public types ──────────────────────────────────────────────────────────
 
-export type ICountDocType = 'proforma' | 'inv' | 'invrec'
+export type ICountDocType = 'order' | 'inv' | 'invrec' | 'offer' | 'rec'
 
 export interface ICountInvoiceResult {
   success:       boolean
@@ -98,7 +98,9 @@ function determineDocType(params: {
   customerType:   string | null
 }): { docType: ICountDocType; label: string } {
   if (params.isDraftMode) {
-    return { docType: 'proforma', label: 'פרופורמה (טיוטת בדיקה)' }
+    // 'proforma' not supported in all iCount plans — use 'order' (הזמנה) for safe testing
+    // Orders are non-tax documents: no official serial, no VAT reporting
+    return { docType: 'order', label: 'הזמנה (טיוטת בדיקה)' }
   }
 
   if (params.hasPaidOnSite) {
