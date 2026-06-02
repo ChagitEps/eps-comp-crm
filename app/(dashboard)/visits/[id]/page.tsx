@@ -6,8 +6,9 @@ import { buttonVariants } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { GoogleSyncButton } from '@/components/visits/google-sync-button'
 import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
-import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS } from '@/types'
-import type { VisitType, VisitStatus } from '@/types'
+import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-button'
+import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
+import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
 import { cn } from '@/lib/utils'
 
 interface PageProps {
@@ -54,6 +55,13 @@ export default async function VisitDetailPage({ params }: PageProps) {
 
   const technician = visit.technician as { full_name: string; hourly_rate: number | null } | null
   const customer = ticket?.customer ?? null
+
+  // current user role — GenerateInvoiceButton shown to admin only
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('role').eq('id', user.id).single()
+    : { data: null }
+  const userRole: UserRole = (profile?.role as UserRole) ?? 'technician_junior'
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -167,7 +175,16 @@ export default async function VisitDetailPage({ params }: PageProps) {
 
       {/* Costs */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold">סיכום עלויות</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">סיכום עלויות</h2>
+          {visit.billing_status && (
+            <StatusBadge
+              label={VISIT_BILLING_STATUS_LABELS[visit.billing_status as VisitBillingStatus] ?? visit.billing_status}
+              colorClass={VISIT_BILLING_STATUS_COLORS[visit.billing_status as VisitBillingStatus] ?? 'bg-gray-100 text-gray-600'}
+            />
+          )}
+        </div>
+
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">עלות עבודה</span>
@@ -183,6 +200,12 @@ export default async function VisitDetailPage({ params }: PageProps) {
               <span>₪{Number(visit.equipment_cost).toLocaleString('he-IL')}</span>
             </div>
           )}
+          {Number(visit.fixed_cost) > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">עלות קבועה</span>
+              <span>₪{Number(visit.fixed_cost).toLocaleString('he-IL')}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border">
             <span>סה״כ</span>
             <span className="text-primary">₪{Number(visit.total_cost).toLocaleString('he-IL')}</span>
@@ -193,6 +216,18 @@ export default async function VisitDetailPage({ params }: PageProps) {
             </p>
           )}
         </div>
+
+        {/* Generate invoice — admin only, visit completed, has amount */}
+        {userRole === 'admin' && Number(visit.total_cost) > 0 && visit.status === 'completed' && (
+          <div className="pt-3 border-t border-border">
+            <GenerateInvoiceButton
+              visitId={id}
+              currentBillingStatus={visit.billing_status ?? 'pending'}
+              existingInvoiceId={visit.icount_invoice_id ?? null}
+              existingInvoiceUrl={visit.icount_invoice_url ?? null}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
