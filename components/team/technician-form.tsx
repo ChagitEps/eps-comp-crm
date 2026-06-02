@@ -94,7 +94,7 @@ export function TechnicianForm({ technician, open, onClose }: TechnicianFormProp
           )}
           {success && (
             <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
-              {technician ? 'הפרופיל עודכן בהצלחה' : 'הזמנה נשלחה לאימייל הטכנאי'}
+              {technician ? 'הפרופיל עודכן בהצלחה' : 'קישור הזמנה נוצר ונשלח למערכת האימייל'}
             </div>
           )}
 

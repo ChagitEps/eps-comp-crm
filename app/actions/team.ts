@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getTenantId } from '@/lib/supabase/get-tenant'
+import { triggerInvitationWebhook } from '@/lib/services/webhookService'
+import { USER_ROLE_LABELS } from '@/types'
 import type { UserRole } from '@/types'
 
 export interface TechnicianFormData {
@@ -36,66 +38,107 @@ function validateTechnician(data: TechnicianFormData): Record<string, string> {
   return errors
 }
 
-async function assertAdmin(): Promise<string | null> {
+interface AdminInfo {
+  userId:    string
+  fullName:  string
+  email:     string
+}
+
+async function assertAdmin(): Promise<AdminInfo | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, full_name')
     .eq('id', user.id)
     .single()
 
-  return profile?.role === 'admin' ? user.id : null
+  if (profile?.role !== 'admin') return null
+
+  return {
+    userId:   user.id,
+    fullName: profile.full_name ?? 'מנהל מערכת',
+    email:    user.email ?? '',
+  }
 }
 
 export async function inviteTechnician(data: TechnicianFormData): Promise<ActionResult> {
   const errors = validateTechnician(data)
   if (Object.keys(errors).length > 0) return { errors }
 
-  const adminId = await assertAdmin()
-  if (!adminId) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const admin = await assertAdmin()
+  if (!admin) return { error: 'אין הרשאה לבצע פעולה זו.' }
 
   const tenantId = await getTenantId()
   if (!tenantId) return { error: 'שגיאה בזיהוי הארגון.' }
 
   const adminClient = createAdminClient()
+  const email       = data.email.trim().toLowerCase()
+  const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-  // Send invitation email — creates the auth user
-  const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-    data.email.trim().toLowerCase(),
-    {
-      data: { full_name: data.full_name.trim() },
-    }
-  )
+  // ── generateLink: creates auth user + returns invite URL, NO email sent ──
+  //
+  // Using generateLink instead of inviteUserByEmail so we control email
+  // delivery through n8n. The returned action_link is a single-use
+  // Supabase magic link valid for 24 hours.
+  //
+  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    type:  'invite',
+    email,
+    options: {
+      data:       { full_name: data.full_name.trim() },
+      redirectTo: `${appUrl}/`,
+    },
+  })
 
-  if (inviteError) {
-    if (inviteError.message.includes('already been registered')) {
+  if (linkError) {
+    if (linkError.message.toLowerCase().includes('already')) {
       return { error: 'כתובת אימייל זו כבר רשומה במערכת.' }
     }
-    return { error: `שגיאה בשליחת ההזמנה: ${inviteError.message}` }
+    return { error: `שגיאה ביצירת קישור ההזמנה: ${linkError.message}` }
   }
 
-  const newUserId = inviteData.user.id
+  const newUserId      = linkData.user.id
+  const invitationLink = linkData.properties.action_link
 
-  // Create profile record
+  // ── Create profile record ─────────────────────────────────────────────
   const supabase = await createClient()
   const { error: profileError } = await supabase.from('profiles').insert({
-    id: newUserId,
-    tenant_id: tenantId,
-    full_name: data.full_name.trim(),
-    role: data.role as UserRole,
-    phone: data.phone.trim() || null,
+    id:          newUserId,
+    tenant_id:   tenantId,
+    full_name:   data.full_name.trim(),
+    role:        data.role as UserRole,
+    phone:       data.phone.trim() || null,
     hourly_rate: data.hourly_rate ? Number(data.hourly_rate) : null,
-    is_active: true,
+    is_active:   true,
   })
 
   if (profileError) {
-    // Rollback: delete the auth user we just created
     await adminClient.auth.admin.deleteUser(newUserId)
     return { error: 'שגיאה ביצירת הפרופיל. ההזמנה בוטלה.' }
   }
+
+  // ── Fire n8n webhook (non-blocking) ──────────────────────────────────
+  const linkExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+  triggerInvitationWebhook({
+    technician_email:  email,
+    technician_name:   data.full_name.trim(),
+    technician_role:   USER_ROLE_LABELS[data.role as UserRole] ?? data.role,
+    invitation_link:   invitationLink,
+    link_expires_at:   linkExpiresAt,
+    invited_by_name:   admin.fullName,
+    invited_by_email:  admin.email,
+    company_name:      'EPS COMP',
+    triggered_at:      new Date().toISOString(),
+    source:            'eps-comp-crm',
+  }).then((result) => {
+    if (!result.sent) {
+      console.warn('[webhook] invitation webhook not sent:', result.error)
+    }
+  })
 
   revalidatePath('/settings/team')
   return {}
@@ -105,8 +148,8 @@ export async function updateTechnician(
   profileId: string,
   data: Omit<TechnicianFormData, 'email'>
 ): Promise<ActionResult> {
-  const adminId = await assertAdmin()
-  if (!adminId) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const admin = await assertAdmin()
+  if (!admin) return { error: 'אין הרשאה לבצע פעולה זו.' }
 
   const supabase = await createClient()
 
@@ -130,8 +173,8 @@ export async function toggleTechnicianActive(
   profileId: string,
   isActive: boolean
 ): Promise<ActionResult> {
-  const adminId = await assertAdmin()
-  if (!adminId) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const admin = await assertAdmin()
+  if (!admin) return { error: 'אין הרשאה לבצע פעולה זו.' }
 
   const supabase = await createClient()
 

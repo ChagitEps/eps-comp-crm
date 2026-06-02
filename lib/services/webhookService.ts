@@ -48,6 +48,52 @@ export interface WebhookResult {
   error?:        string
 }
 
+// ── Invitation webhook payload ────────────────────────────────────────────
+
+export interface InvitationWebhookPayload {
+  technician_email:  string
+  technician_name:   string
+  technician_role:   string          // 'טכנאי ראשי' | 'טכנאי' | 'מנהל/ת חשבונות'
+  invitation_link:   string          // Supabase magic-link — single use
+  link_expires_at:   string          // ISO — Supabase invite links expire after 24h
+  invited_by_name:   string          // admin full_name
+  invited_by_email:  string          // admin email
+  company_name:      string          // tenant / company name (EPS COMP)
+  triggered_at:      string
+  source:            'eps-comp-crm'
+}
+
+export async function triggerInvitationWebhook(
+  payload: InvitationWebhookPayload
+): Promise<WebhookResult> {
+  const url    = process.env.N8N_INVITATION_WEBHOOK_URL
+  const secret = process.env.N8N_WEBHOOK_SECRET
+
+  if (!url) {
+    return { sent: false, error: 'N8N_INVITATION_WEBHOOK_URL לא מוגדר' }
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (secret) headers['Authorization'] = `Bearer ${secret}`
+
+    const res = await fetch(url, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(5000),
+    })
+
+    return { sent: true, status: res.status }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[webhook] triggerInvitationWebhook failed:', msg)
+    return { sent: false, error: msg }
+  }
+}
+
 export async function triggerInvoiceWebhook(
   payload: InvoiceWebhookPayload
 ): Promise<WebhookResult> {
