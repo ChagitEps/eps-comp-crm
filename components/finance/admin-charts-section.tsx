@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react'
 import {
   Chart,
   ArcElement,
+  PieController,
+  BarController,
   Tooltip,
   Legend,
   CategoryScale,
@@ -16,14 +18,16 @@ import {
 import { TrendingUp, Package, Lock } from 'lucide-react'
 import type { BillingStatusBreakdown, ProfitabilityData } from '@/app/actions/finance'
 
-// Register Chart.js modules once
+// Chart.js v4 tree-shaking: controllers must be registered explicitly
 Chart.register(
+  PieController,
+  BarController,
   ArcElement,
-  Tooltip,
-  Legend,
+  BarElement,
   CategoryScale,
   LinearScale,
-  BarElement,
+  Tooltip,
+  Legend,
   Title,
 )
 
