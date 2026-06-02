@@ -103,9 +103,10 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
   const newUserId      = linkData.user.id
   const invitationLink = linkData.properties.action_link
 
-  // ── Create profile record ─────────────────────────────────────────────
-  const supabase = await createClient()
-  const { error: profileError } = await supabase.from('profiles').insert({
+  // ── Create profile record (admin client — bypasses RLS) ──────────────
+  // Must use adminClient here: the new user's ID differs from the logged-in
+  // admin, so the regular client is blocked by profiles RLS on INSERT.
+  const { error: profileError } = await adminClient.from('profiles').insert({
     id:          newUserId,
     tenant_id:   tenantId,
     full_name:   data.full_name.trim(),
@@ -116,8 +117,12 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
   })
 
   if (profileError) {
-    await adminClient.auth.admin.deleteUser(newUserId)
-    return { error: 'שגיאה ביצירת הפרופיל. ההזמנה בוטלה.' }
+    console.error('[inviteTechnician] profile insert failed:', profileError.message)
+    // Don't rollback if profile already exists (user was previously invited)
+    if (!profileError.message.includes('duplicate') && !profileError.message.includes('unique')) {
+      await adminClient.auth.admin.deleteUser(newUserId)
+    }
+    return { error: `שגיאה ביצירת הפרופיל: ${profileError.message}` }
   }
 
   // ── Fire n8n webhook (non-blocking) ──────────────────────────────────
