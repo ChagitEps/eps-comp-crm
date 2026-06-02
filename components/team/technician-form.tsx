@@ -29,7 +29,11 @@ import {
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'technician_senior', label: 'טכנאי ראשי' },
   { value: 'technician_junior', label: 'טכנאי' },
+  { value: 'accountant',        label: 'מנהל/ת חשבונות' },
 ]
+
+// Roles that don't bill by the hour
+const ROLES_WITHOUT_RATE: UserRole[] = ['accountant']
 
 interface TechnicianFormProps {
   technician?: Profile
@@ -79,7 +83,7 @@ export function TechnicianForm({ technician, open, onClose }: TechnicianFormProp
     <Dialog open={open} onOpenChange={(open) => !open && !isPending && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{technician ? 'עריכת טכנאי' : 'הזמנת טכנאי חדש'}</DialogTitle>
+          <DialogTitle>{technician ? 'עריכת משתמש' : 'הזמנת משתמש חדש'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -151,22 +155,24 @@ export function TechnicianForm({ technician, open, onClose }: TechnicianFormProp
             {errors.role && <p className="text-xs text-destructive">{errors.role}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label>תעריף שעתי (₪)</Label>
-            <Input
-              value={form.hourly_rate}
-              onChange={(e) => set('hourly_rate', e.target.value)}
-              placeholder="150"
-              type="number"
-              min="0"
-              dir="ltr"
-              aria-invalid={!!errors.hourly_rate}
-            />
-            {errors.hourly_rate && <p className="text-xs text-destructive">{errors.hourly_rate}</p>}
-            <p className="text-xs text-muted-foreground">
-              ישמש לחישוב עלות עבודה אוטומטי בביקורים
-            </p>
-          </div>
+          {!ROLES_WITHOUT_RATE.includes(form.role as UserRole) && (
+            <div className="space-y-1.5">
+              <Label>תעריף שעתי (₪)</Label>
+              <Input
+                value={form.hourly_rate}
+                onChange={(e) => set('hourly_rate', e.target.value)}
+                placeholder="150"
+                type="number"
+                min="0"
+                dir="ltr"
+                aria-invalid={!!errors.hourly_rate}
+              />
+              {errors.hourly_rate && <p className="text-xs text-destructive">{errors.hourly_rate}</p>}
+              <p className="text-xs text-muted-foreground">
+                ישמש לחישוב עלות עבודה אוטומטי בביקורים
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

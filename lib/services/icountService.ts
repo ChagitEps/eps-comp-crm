@@ -181,7 +181,7 @@ export async function generateInvoiceForVisit(
   }
 
   // שורות ציוד — כל פריט בנפרד
-  const wItems = (warehouseItems ?? []) as Array<{
+  const wItems = (warehouseItems ?? []) as unknown as Array<{
     quantity: number
     unit_price: number | null
     warehouse_item: { name: string } | null

@@ -60,8 +60,8 @@ export async function finalizeVisitBilling(
     return { error: 'ביקור לא נמצא.' }
   }
 
-  const technician = visit.technician as { hourly_rate: number | null } | null
-  const ticket     = visit.ticket     as { id: string; customer: { billing_model: string | null } | null } | null
+  const technician = visit.technician as unknown as { hourly_rate: number | null } | null
+  const ticket     = visit.ticket     as unknown as { id: string; customer: { billing_model: string | null } | null } | null
   const customer   = ticket?.customer ?? null
 
   const isContract      = customer?.billing_model === 'contract'
@@ -140,6 +140,7 @@ export async function finalizeVisitBilling(
 
   revalidatePath(`/visits/${visitId}`)
   revalidatePath('/visits')
+  revalidatePath('/finance')
 
   const result: BillingResult = {
     visitId,
@@ -164,10 +165,11 @@ export async function updateVisitBillingStatus(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'לא מחובר.' }
 
-  // Admin only for billing changes
+  // Admin or accountant can change billing status
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return { error: 'רק מנהל יכול לשנות סטטוס חיוב.' }
+  const canBill = profile?.role === 'admin' || profile?.role === 'accountant'
+  if (!canBill) return { error: 'אין הרשאה לשנות סטטוס חיוב.' }
 
   const { error } = await supabase
     .from('visits')
@@ -197,5 +199,6 @@ export async function updateVisitBillingStatus(
   })
 
   revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/finance')
   return {}
 }

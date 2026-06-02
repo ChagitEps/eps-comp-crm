@@ -1,6 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Routes the accountant role is allowed to access
+const ACCOUNTANT_ALLOWED_PREFIXES = ['/finance', '/api/billing', '/api/auth']
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -45,6 +48,24 @@ export async function proxy(request: NextRequest) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // Accountant role: restricted to /finance and billing API routes only
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role === 'accountant') {
+      const allowed = ACCOUNTANT_ALLOWED_PREFIXES.some((prefix) =>
+        pathname === prefix || pathname.startsWith(prefix + '/')
+      )
+      if (!allowed) {
+        return NextResponse.redirect(new URL('/finance', request.url))
+      }
+    }
   }
 
   return supabaseResponse

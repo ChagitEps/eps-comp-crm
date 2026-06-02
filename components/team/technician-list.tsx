@@ -7,13 +7,8 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TechnicianForm } from './technician-form'
 import { toggleTechnicianActive } from '@/app/actions/team'
-import type { Profile } from '@/types'
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'מנהל מערכת',
-  technician_senior: 'טכנאי ראשי',
-  technician_junior: 'טכנאי',
-}
+import { USER_ROLE_LABELS, USER_ROLE_COLORS } from '@/types'
+import type { Profile, UserRole } from '@/types'
 
 interface TechnicianListProps {
   technicians: Profile[]
@@ -52,14 +47,8 @@ export function TechnicianList({ technicians, currentUserId }: TechnicianListPro
                     <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">אתה</span>
                   )}
                   <StatusBadge
-                    label={ROLE_LABELS[tech.role] ?? tech.role}
-                    colorClass={
-                      tech.role === 'admin'
-                        ? 'bg-purple-100 text-purple-700'
-                        : tech.role === 'technician_senior'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }
+                    label={USER_ROLE_LABELS[tech.role as UserRole] ?? tech.role}
+                    colorClass={USER_ROLE_COLORS[tech.role as UserRole] ?? 'bg-gray-100 text-gray-600'}
                   />
                   {!tech.is_active && (
                     <StatusBadge label="לא פעיל" colorClass="bg-red-100 text-red-700" />

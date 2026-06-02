@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/visits': 'ביקורים',
   '/calendar': 'יומן',
   '/warehouse': 'מחסן ומלאי',
+  '/finance': 'הנהלת חשבונות',
   '/settings': 'הגדרות',
   '/settings/team': 'ניהול צוות',
 }

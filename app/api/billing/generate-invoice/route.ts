@@ -9,11 +9,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'לא מחובר' }, { status: 401 })
   }
 
-  // Admin only
+  // Admin or accountant
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
-    return NextResponse.json({ error: 'רק מנהל יכול להפיק חשבוניות' }, { status: 403 })
+  const canInvoice = profile?.role === 'admin' || profile?.role === 'accountant'
+  if (!canInvoice) {
+    return NextResponse.json({ error: 'אין הרשאה להפיק חשבוניות' }, { status: 403 })
   }
 
   let visitId: string

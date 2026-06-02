@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'technician_senior' | 'technician_junior'
+export type UserRole = 'admin' | 'technician_senior' | 'technician_junior' | 'accountant'
 
 export type CustomerType =
   | 'private'
@@ -378,6 +378,20 @@ export interface VisitEquipment {
   action: VisitEquipmentAction | null
   notes: string | null
   created_at: string
+}
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  admin:               'מנהל מערכת',
+  technician_senior:   'טכנאי ראשי',
+  technician_junior:   'טכנאי',
+  accountant:          'מנהל/ת חשבונות',
+}
+
+export const USER_ROLE_COLORS: Record<UserRole, string> = {
+  admin:             'bg-purple-100 text-purple-800',
+  technician_senior: 'bg-blue-100 text-blue-800',
+  technician_junior: 'bg-gray-100 text-gray-700',
+  accountant:        'bg-emerald-100 text-emerald-800',
 }
 
 export const BILLING_MODEL_LABELS: Record<BillingModel, string> = {
