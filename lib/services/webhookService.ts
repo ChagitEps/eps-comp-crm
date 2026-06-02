@@ -1,0 +1,84 @@
+'use server'
+
+// ── Webhook Service ───────────────────────────────────────────────────────
+//
+// Triggers n8n (or any HTTP endpoint) after key billing events.
+// Fire-and-forget: a webhook failure never blocks the invoice flow.
+//
+// Required env var:
+//   N8N_INVOICE_WEBHOOK_URL — the n8n Webhook node URL
+//   (e.g. https://your-n8n.example.com/webhook/invoice-created)
+//
+// Optional:
+//   N8N_WEBHOOK_SECRET — if set, sent as Authorization: Bearer header
+//   so n8n can verify the request came from this app.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface InvoiceWebhookPayload {
+  // Document identity
+  invoice_id:   string          // iCount docnum
+  invoice_url:  string | null   // PDF link
+  doc_date:     string          // YYYY-MM-DD
+  doc_type:     string          // 'inv' | 'invrec' | 'order'
+  doc_type_label: string        // Hebrew label
+  is_draft:     boolean         // true = test/order, not a real invoice
+
+  // Client
+  client_name:  string
+  company_name: string | null   // business_name if different from name
+  client_email: string | null
+
+  // Financial
+  total_amount: number          // incl. VAT
+  currency:     string          // 'ILS'
+
+  // Context
+  visit_id:     string
+  ticket_number: number
+  ticket_title:  string
+
+  // Metadata
+  triggered_at: string          // ISO timestamp
+  source:       'eps-comp-crm'
+}
+
+export interface WebhookResult {
+  sent:          boolean
+  status?:       number
+  error?:        string
+}
+
+export async function triggerInvoiceWebhook(
+  payload: InvoiceWebhookPayload
+): Promise<WebhookResult> {
+  const url    = process.env.N8N_INVOICE_WEBHOOK_URL
+  const secret = process.env.N8N_WEBHOOK_SECRET   // optional
+
+  if (!url) {
+    // Not configured — skip silently (not an error)
+    return { sent: false, error: 'N8N_INVOICE_WEBHOOK_URL לא מוגדר' }
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (secret) {
+      headers['Authorization'] = `Bearer ${secret}`
+    }
+
+    const res = await fetch(url, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify(payload),
+      // 5-second timeout — don't block invoice flow for a slow webhook
+      signal:  AbortSignal.timeout(5000),
+    })
+
+    return { sent: true, status: res.status }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[webhook] triggerInvoiceWebhook failed:', msg)
+    return { sent: false, error: msg }
+  }
+}
