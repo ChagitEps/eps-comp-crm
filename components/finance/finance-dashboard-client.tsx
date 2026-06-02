@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { FileText, CheckCircle2, Loader2, ExternalLink, AlertCircle, TrendingUp, Receipt, AlertTriangle } from 'lucide-react'
+import { FileText, CheckCircle2, Loader2, ExternalLink, AlertCircle, TrendingUp, Receipt, AlertTriangle, FlaskConical } from 'lucide-react'
+
+const IS_DRAFT = process.env.NEXT_PUBLIC_ICOUNT_DRAFT_MODE === 'true'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { cn } from '@/lib/utils'
@@ -77,21 +79,28 @@ function fmtDate(iso: string | null) {
 
 function RowActions({ row, onDone }: { row: FinanceRow; onDone: (id: string, newStatus: VisitBillingStatus, invoiceId?: string, invoiceUrl?: string) => void }) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [error,      setError]      = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [draftUrl,   setDraftUrl]   = useState<string | null>(null)   // PDF link after draft
 
   async function handleGenerate() {
     setError(null)
     setGenerating(true)
     try {
-      const res = await fetch('/api/billing/generate-invoice', {
-        method: 'POST',
+      const res  = await fetch('/api/billing/generate-invoice', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitId: row.id }),
+        body:    JSON.stringify({ visitId: row.id }),
       })
       const data = await res.json()
       if (!res.ok || data.error) { setError(data.error ?? 'שגיאה'); return }
-      onDone(row.id, 'invoiced', data.invoiceId, data.invoiceUrl)
+
+      if (data.isDraft) {
+        // Draft: don't change billing status, just show PDF link
+        setDraftUrl(data.invoiceUrl ?? null)
+      } else {
+        onDone(row.id, 'invoiced', data.invoiceId, data.invoiceUrl)
+      }
     } catch {
       setError('שגיאת רשת')
     } finally {
@@ -112,16 +121,34 @@ function RowActions({ row, onDone }: { row: FinanceRow; onDone: (id: string, new
 
   return (
     <div className="flex flex-col gap-1.5 min-w-[160px]">
-      {/* Generate invoice — pending only */}
-      {row.billing_status === 'pending' && (
+      {/* Draft PDF link after generation */}
+      {draftUrl && (
+        <a href={draftUrl} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 hover:bg-amber-100 transition-colors">
+          <FlaskConical className="h-3 w-3 shrink-0" />
+          צפה בטיוטה (PDF)
+        </a>
+      )}
+
+      {/* Generate button — pending only */}
+      {row.billing_status === 'pending' && !draftUrl && (
         <Button size="sm" onClick={handleGenerate} disabled={busy}
-          className="gap-1.5 h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white">
-          {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-          הפק חשבונית
+          className={cn(
+            'gap-1.5 h-7 text-xs',
+            IS_DRAFT
+              ? 'bg-amber-500 hover:bg-amber-600 text-white'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          )}>
+          {generating
+            ? <Loader2 className="h-3 w-3 animate-spin" />
+            : IS_DRAFT
+              ? <FlaskConical className="h-3 w-3" />
+              : <FileText className="h-3 w-3" />}
+          {IS_DRAFT ? 'הפק טיוטה' : 'הפק חשבונית'}
         </Button>
       )}
 
-      {/* Invoice link — invoiced */}
+      {/* Invoice link — invoiced (live mode) */}
       {row.billing_status === 'invoiced' && row.icount_invoice_id && (
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-mono text-muted-foreground">#{row.icount_invoice_id}</span>
