@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { GoogleSyncButton } from '@/components/visits/google-sync-button'
 import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
 import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-button'
+import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
 import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
 import { cn } from '@/lib/utils'
@@ -114,6 +115,9 @@ export default async function VisitDetailPage({ params }: PageProps) {
               <Edit className="h-3.5 w-3.5" />
               עריכה
             </Link>
+            {userRole === 'admin' && (
+              <DeleteVisitButton visitId={id} ticketId={ticket?.id} />
+            )}
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
-import { Sparkles, Package, Wrench, Shield, ChevronDown, ChevronUp, Loader2, AlertCircle, Check } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Sparkles, Package, Wrench, Shield, ChevronDown, ChevronUp, Loader2, AlertCircle, Check, PlayCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +15,7 @@ interface AiChecklistPanelProps {
   visitId?: string
   ticketId: string
   customerId: string
-  autoGenerate?: boolean   // ← צור אוטומטית בפתיחה
+  autoGenerate?: boolean   // ← מציג כרטיס אישור לפני פתיחה
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -73,21 +73,17 @@ function CheckRow({
 
 export function AiChecklistPanel({ visitId, ticketId, customerId, autoGenerate = false }: AiChecklistPanelProps) {
   const [isPending, startTransition] = useTransition()
-  const [checklist, setChecklist] = useState<Checklist | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(true)
-
-  const [checked, setChecked] = useState<Record<string, boolean>>({})
+  const [checklist,        setChecklist]        = useState<Checklist | null>(null)
+  const [error,            setError]            = useState<string | null>(null)
+  const [expanded,         setExpanded]         = useState(true)
+  const [approved,         setApproved]         = useState(false)   // טכנאי אישר פתיחה
+  const [checked,          setChecked]          = useState<Record<string, boolean>>({})
 
   function toggle(key: string) {
     setChecked(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // טעינה אוטומטית בפתיחה
-  useEffect(() => {
-    if (autoGenerate) handleGenerate()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // כאשר autoGenerate=true — ממתין לאישור הטכנאי לפני יצירה
 
   function handleGenerate() {
     setError(null)
@@ -118,6 +114,44 @@ export function AiChecklistPanel({ visitId, ticketId, customerId, autoGenerate =
   const doneCount = Object.values(checked).filter(Boolean).length
   const progressPct = totalItems > 0 ? Math.round((doneCount / totalItems) * 100) : 0
 
+  // ── כרטיס אישור — מוצג כאשר autoGenerate=true ולפני שהטכנאי אישר ──────
+  if (autoGenerate && !approved && !checklist) {
+    return (
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="p-5 flex items-start gap-4">
+          {/* Icon */}
+          <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+            <Sparkles className="h-5 w-5 text-violet-600" />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">AI Checklist Agent מוכן</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                לאחר אישורך יווצר צ׳קליסט מותאם אישית לביקור זה — כולל ציוד להביא, משימות ובדיקות מומלצות.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                onClick={() => { setApproved(true); handleGenerate() }}
+                className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+              >
+                <PlayCircle className="h-4 w-4" />
+                אשר ופתח צ׳קליסט
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                ניתן לדלג ולפתוח לאחר מכן
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       {/* Header */}
@@ -137,7 +171,7 @@ export function AiChecklistPanel({ visitId, ticketId, customerId, autoGenerate =
         </div>
         <div className="flex items-center gap-2">
           {!checklist && !isPending && (
-            <Button size="sm" onClick={handleGenerate}
+            <Button size="sm" onClick={() => { setApproved(true); handleGenerate() }}
               className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white">
               <Sparkles className="h-3.5 w-3.5" />
               צור צ׳קליסט חכם

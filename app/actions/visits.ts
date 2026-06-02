@@ -279,6 +279,41 @@ export async function rescheduleVisit(
   return {}
 }
 
+// ── Admin-only: delete a visit (hard delete) ─────────────────────────────
+export async function deleteVisit(visitId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'לא מחובר.' }
+
+  const { data: profile } = await supabase
+    .from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return { error: 'אין הרשאה — רק מנהל יכול למחוק ביקורים.' }
+
+  // Fetch ticket_id for redirect and revalidation before deleting
+  const { data: visit } = await supabase
+    .from('visits').select('ticket_id').eq('id', visitId).single()
+  const ticketId = visit?.ticket_id ?? null
+
+  // visit_warehouse_items cascades automatically (ON DELETE CASCADE)
+  const { error } = await supabase.from('visits').delete().eq('id', visitId)
+  if (error) return { error: `שגיאה במחיקת הביקור: ${error.message}` }
+
+  await supabase.from('audit_logs').insert({
+    user_id:     user.id,
+    action:      'visit_deleted',
+    entity_type: 'visit',
+    entity_id:   visitId,
+    after_data:  { deleted_by: user.id },
+  })
+
+  revalidatePath('/visits')
+  if (ticketId) revalidatePath(`/tickets/${ticketId}`)
+  revalidatePath('/finance')
+
+  return {}
+}
+
 // ── Admin-only: reassign visit to a different technician ──────────────────
 export async function reassignVisitTechnician(
   visitId: string,
@@ -303,3 +338,4 @@ export async function reassignVisitTechnician(
   revalidatePath(`/visits/${visitId}`)
   return {}
 }
+
