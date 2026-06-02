@@ -30,49 +30,41 @@ export async function GET() {
     user_value: apiUser,   // safe to log — not a secret
   }
 
-  // ── Step 1: try /auth/token (validates credentials only) ─────────────
-  let authResult: unknown = null
-  let authError: string | null = null
-  try {
-    const r = await fetch('https://api.icount.co.il/api/v3.php/auth/token', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ cid, user: apiUser, pass: apiKey }),
-    })
-    authResult = await r.json()
-  } catch (e) {
-    authError = String(e)
+  async function tryAuth(body: Record<string, string>, ct = 'application/json') {
+    try {
+      const r = await fetch('https://api.icount.co.il/api/v3.php/auth/token', {
+        method:  'POST',
+        headers: { 'Content-Type': ct },
+        body:    ct === 'application/json'
+          ? JSON.stringify(body)
+          : new URLSearchParams(body).toString(),
+      })
+      return await r.json()
+    } catch (e) { return { fetch_error: String(e) } }
   }
 
-  // ── Step 2: try with api_key field instead of pass ───────────────────
-  let authResult2: unknown = null
-  try {
-    const r = await fetch('https://api.icount.co.il/api/v3.php/auth/token', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ cid, user: apiUser, api_key: apiKey }),
-    })
-    authResult2 = await r.json()
-  } catch { /* ignore */ }
+  const [r1, r2, r3, r4] = await Promise.all([
+    // Test 1: JSON + pass (standard)
+    tryAuth({ cid, user: apiUser, pass: apiKey }),
+    // Test 2: JSON + api_key
+    tryAuth({ cid, user: apiUser, api_key: apiKey }),
+    // Test 3: form-encoded + pass
+    tryAuth({ cid, user: apiUser, pass: apiKey }, 'application/x-www-form-urlencoded'),
+    // Test 4: without user field — check if user is the problem
+    tryAuth({ cid, pass: apiKey }),
+  ])
 
-  // ── Step 3: try form-encoded (some iCount versions require this) ──────
-  let authResult3: unknown = null
-  try {
-    const body = new URLSearchParams({ cid, user: apiUser, pass: apiKey })
-    const r = await fetch('https://api.icount.co.il/api/v3.php/auth/token', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    body.toString(),
-    })
-    authResult3 = await r.json()
-  } catch { /* ignore */ }
+  const diagnosis = [r1, r2, r3, r4].map((r, i) => {
+    const labels = ['JSON+pass', 'JSON+api_key', 'form+pass', 'no-user-field']
+    return { method: labels[i], status: (r as {status?: unknown}).status, reason: (r as {reason?: unknown}).reason, details: (r as {error_details?: unknown}).error_details }
+  })
 
   return NextResponse.json({
     credentials,
-    test_pass_field:    authResult,
-    test_api_key_field: authResult2,
-    test_form_encoded:  authResult3,
-    authError,
-    hint: 'user_value מציג את ה-ICOUNT_API_USER הנוכחי. חייב להיות כתובת אימייל (לדוגמה: user@company.com)',
+    diagnosis,
+    raw: { r1, r2, r3, r4 },
+    next_step: diagnosis.some(d => d.status === true)
+      ? '✅ אחת השיטות עבדה!'
+      : '❌ כל השיטות נכשלו — בדוק CID ו-API_USER ב: iCount → הגדרות → API',
   })
 }

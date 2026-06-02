@@ -304,14 +304,17 @@ export async function generateInvoiceForVisit(
       items: payload.items,
     }
 
+    const isAuthErr = (r: ICountRaw) =>
+      r.status !== 'success' && (r.reason === 'bad_login' || r.reason === 'auth_required')
+
     // attempt 1: JSON + pass
     const r1 = await tryCall({ ...base, pass: apiKey }, 'application/json')
-    if (r1.status === 'success' || r1.reason !== 'bad_login') {
+    if (r1.status === 'success' || !isAuthErr(r1)) {
       apiResult = r1
     } else {
-      // attempt 2: JSON + api_key
+      // attempt 2: JSON + api_key field
       const r2 = await tryCall({ ...base, api_key: apiKey }, 'application/json')
-      if (r2.status === 'success' || r2.reason !== 'bad_login') {
+      if (r2.status === 'success' || !isAuthErr(r2)) {
         apiResult = r2
       } else {
         // attempt 3: form-encoded + pass
