@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes the accountant role is allowed to access
-const ACCOUNTANT_ALLOWED_PREFIXES = ['/finance', '/api/billing', '/api/auth']
+const ACCOUNTANT_ALLOWED_PREFIXES = ['/finance', '/api/billing', '/api/auth', '/auth']
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -36,10 +36,17 @@ export async function proxy(request: NextRequest) {
 
   // Public routes — no auth required
   const publicRoutes = ['/login']
+  // Accept-invite: authenticated user sets their password — must NOT redirect away
+  const allowAuthenticatedRoutes = ['/auth/accept-invite']
+
   if (publicRoutes.includes(pathname)) {
     if (user) {
       return NextResponse.redirect(new URL('/', request.url))
     }
+    return supabaseResponse
+  }
+
+  if (allowAuthenticatedRoutes.some(r => pathname.startsWith(r))) {
     return supabaseResponse
   }
 

@@ -89,7 +89,7 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
     email,
     options: {
       data:       { full_name: data.full_name.trim() },
-      redirectTo: `${appUrl}/`,
+      redirectTo: `${appUrl}/auth/accept-invite`,
     },
   })
 
