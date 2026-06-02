@@ -268,18 +268,56 @@ export async function generateInvoiceForVisit(
   if (customer?.email)  payload.client_email = customer.email
   if (customer?.vat_id) payload.vat_id       = customer.vat_id
 
-  let apiResult: {
-    status?: string; docnum?: number | string; doc_url?: string;
-    reason?: string; message?: string
-  }
+  // ── שליחה ל-iCount עם fallback על שיטות אימות שונות ────────────────────
+  //
+  // iCount תומכת בשלוש שיטות auth — מנסים בסדר עד שאחת מצליחה:
+  //   1. JSON + pass field   (שיטה סטנדרטית)
+  //   2. JSON + api_key field (חשבונות API key)
+  //   3. form-encoded + pass  (גרסאות ישנות)
+  //
+  type ICountRaw = { status?: string; docnum?: number | string; doc_url?: string; reason?: string; message?: string }
 
-  try {
+  async function tryCall(body: Record<string, unknown>, contentType: string): Promise<ICountRaw> {
     const res = await fetch(ICOUNT_API_URL, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      headers: { 'Content-Type': contentType },
+      body:    contentType === 'application/json'
+        ? JSON.stringify(body)
+        : new URLSearchParams(body as Record<string, string>).toString(),
     })
-    apiResult = await res.json()
+    return res.json() as Promise<ICountRaw>
+  }
+
+  let apiResult: ICountRaw
+
+  try {
+    const base = {
+      cid:         payload.cid,
+      user:        payload.user,
+      doctype:     payload.doctype,
+      client_name: payload.client_name,
+      doc_date:    payload.doc_date,
+      currency_id: payload.currency_id,
+      ...(payload.client_email && { client_email: payload.client_email }),
+      ...(payload.vat_id       && { vat_id:       payload.vat_id }),
+      ...(payload.comments     && { comments:     payload.comments }),
+      items: payload.items,
+    }
+
+    // attempt 1: JSON + pass
+    const r1 = await tryCall({ ...base, pass: apiKey }, 'application/json')
+    if (r1.status === 'success' || r1.reason !== 'bad_login') {
+      apiResult = r1
+    } else {
+      // attempt 2: JSON + api_key
+      const r2 = await tryCall({ ...base, api_key: apiKey }, 'application/json')
+      if (r2.status === 'success' || r2.reason !== 'bad_login') {
+        apiResult = r2
+      } else {
+        // attempt 3: form-encoded + pass
+        apiResult = await tryCall({ ...base, pass: apiKey } as Record<string, unknown>, 'application/x-www-form-urlencoded')
+      }
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'שגיאת רשת'
     return { success: false, error: `שגיאת חיבור ל-iCount: ${msg}` }
@@ -287,6 +325,13 @@ export async function generateInvoiceForVisit(
 
   if (apiResult.status !== 'success') {
     const reason = apiResult.reason ?? apiResult.message ?? 'שגיאה לא ידועה'
+    // bad_login hint
+    if (reason === 'bad_login') {
+      return {
+        success: false,
+        error: `iCount: bad_login — בדוק ש-ICOUNT_API_USER הוא כתובת האימייל של המשתמש ב-iCount (לא שם, לא ח.פ). הערך הנוכחי: "${apiUser}"`,
+      }
+    }
     return { success: false, error: `iCount: ${reason}` }
   }
 
