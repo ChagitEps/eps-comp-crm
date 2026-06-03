@@ -9,6 +9,7 @@ import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
 import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-button'
 import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
 import { VisitTimer } from '@/components/visits/visit-timer'
+import { VisitOutcome } from '@/components/visits/visit-outcome'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
 import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
 import { cn } from '@/lib/utils'
@@ -42,7 +43,7 @@ export default async function VisitDetailPage({ params }: PageProps) {
     .from('visits')
     .select(`
       *,
-      ticket:tickets(id, title, ticket_number, customer:customers(id, name, business_name)),
+      ticket:tickets(id, title, ticket_number, status, customer:customers(id, name, business_name)),
       technician:technician_id(full_name, hourly_rate)
     `)
     .eq('id', id)
@@ -169,6 +170,17 @@ export default async function VisitDetailPage({ params }: PageProps) {
           status={visit.status}
           startTime={visit.start_time ?? null}
           durationMinutes={visit.duration_minutes ?? null}
+        />
+      )}
+
+      {/* Visit outcome — shown after visit is completed, ticket not yet closed */}
+      {visit.status === 'completed' && ticket?.id && (
+        <VisitOutcome
+          visitId={id}
+          ticketId={ticket.id}
+          currentStatus={
+            (ticket as unknown as { status: string }).status as import('@/types').TicketStatus
+          }
         />
       )}
 

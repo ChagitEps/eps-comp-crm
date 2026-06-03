@@ -38,6 +38,12 @@ export default async function TicketDetailPage({ params }: PageProps) {
 
   if (!ticket) notFound()
 
+  // ── Auto-mark 'new' → 'read' when any user opens the ticket ──────────
+  if (ticket.status === 'new') {
+    await supabase.from('tickets').update({ status: 'read' }).eq('id', id)
+    ticket.status = 'read'
+  }
+
   const customer = ticket.customer as { id: string; name: string; business_name: string | null } | null
   const technician = ticket.assigned_technician as { full_name: string } | null
 
