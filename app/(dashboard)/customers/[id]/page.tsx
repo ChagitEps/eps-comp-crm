@@ -9,6 +9,8 @@ import { CustomerDetails } from '@/components/customers/customer-details'
 import { ContactsSection } from '@/components/customers/contacts-section'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { CustomerDocuments } from '@/components/files/customer-documents'
+import { CustomerBillingPanel } from '@/components/customers/customer-billing-panel'
+import type { CustomerBillingVisit } from '@/components/customers/customer-billing-panel'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
   TICKET_STATUS_LABELS, TICKET_STATUS_COLORS,
@@ -43,6 +45,7 @@ export default async function CustomerPage({ params }: PageProps) {
     { data: visits },
     { data: equipment },
     { data: rawCustomerFiles },
+    { data: rawBillingVisits },
   ] = await Promise.all([
     supabase.from('customers').select('*').eq('id', id).eq('is_deleted', false).single(),
     supabase.from('contacts').select('*').eq('customer_id', id).order('name'),
@@ -55,9 +58,41 @@ export default async function CustomerPage({ params }: PageProps) {
       .select('*, uploader:uploaded_by(full_name)')
       .eq('customer_id', id)
       .order('created_at', { ascending: false }),
+    // Billing: all visits for this customer with billing fields
+    supabase
+      .from('visits')
+      .select(`
+        id, start_time, visit_type,
+        billing_status, work_cost, equipment_cost, fixed_cost, total_cost,
+        icount_invoice_id, icount_invoice_url,
+        ticket:tickets!inner(id, title, ticket_number, customer_id)
+      `)
+      .eq('ticket.customer_id', id)
+      .eq('status', 'completed')
+      .order('start_time', { ascending: false }),
   ])
 
   if (!customer) notFound()
+
+  // Map billing visits into typed rows
+  const billingVisits: CustomerBillingVisit[] = (rawBillingVisits ?? []).map((v) => {
+    const t = v.ticket as unknown as { id: string; title: string; ticket_number: number } | null
+    return {
+      id:                 v.id as string,
+      ticket_id:          t?.id ?? '',
+      ticket_number:      t?.ticket_number ?? 0,
+      ticket_title:       t?.title ?? '',
+      start_time:         v.start_time as string | null,
+      visit_type:         v.visit_type as string,
+      billing_status:     (v.billing_status as string) ?? 'pending',
+      work_cost:          Number(v.work_cost ?? 0),
+      equipment_cost:     Number(v.equipment_cost ?? 0),
+      fixed_cost:         Number(v.fixed_cost ?? 0),
+      total_cost:         Number(v.total_cost ?? 0),
+      icount_invoice_id:  v.icount_invoice_id as string | null ?? null,
+      icount_invoice_url: v.icount_invoice_url as string | null ?? null,
+    }
+  })
 
   // Generate signed URLs server-side for image preview
   const customerFiles = await Promise.all(
@@ -82,13 +117,16 @@ export default async function CustomerPage({ params }: PageProps) {
     })
   )
 
+  const canSeeBilling = userRole === 'admin' || userRole === 'accountant'
+
   const tabs = [
-    { id: 'details' as const, label: 'פרטים' },
-    { id: 'contacts' as const, label: 'אנשי קשר', count: contacts?.length ?? 0 },
-    { id: 'tickets' as const, label: 'קריאות', count: tickets?.length ?? 0 },
-    { id: 'visits' as const, label: 'ביקורים', count: visits?.length ?? 0 },
-    { id: 'equipment' as const, label: 'ציוד', count: equipment?.length ?? 0 },
-    { id: 'documents' as const, label: 'מסמכים', count: customerFiles.length },
+    { id: 'details'   as const, label: 'פרטים' },
+    { id: 'contacts'  as const, label: 'אנשי קשר', count: contacts?.length ?? 0 },
+    { id: 'tickets'   as const, label: 'קריאות',   count: tickets?.length ?? 0 },
+    { id: 'visits'    as const, label: 'ביקורים',  count: visits?.length ?? 0 },
+    { id: 'equipment' as const, label: 'ציוד',      count: equipment?.length ?? 0 },
+    { id: 'documents' as const, label: 'מסמכים',   count: customerFiles.length },
+    ...(canSeeBilling ? [{ id: 'billing' as const, label: 'חיובים', count: billingVisits.filter(v => v.total_cost > 0).length }] : []),
   ]
 
   // Build each panel as a ReactNode on the server — no functions cross the boundary
@@ -203,6 +241,13 @@ export default async function CustomerPage({ params }: PageProps) {
                 customerId={id}
                 files={customerFiles}
                 userRole={userRole}
+              />
+            ),
+            billing: (
+              <CustomerBillingPanel
+                visits={billingVisits}
+                userRole={userRole}
+                customerId={id}
               />
             ),
           }}

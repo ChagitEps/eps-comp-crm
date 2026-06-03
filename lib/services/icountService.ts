@@ -20,7 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@/lib/supabase/server'
-import { triggerInvoiceWebhook } from '@/lib/services/webhookService'
+import { triggerInvoiceWebhook, triggerInvoiceDeliveryWebhook } from '@/lib/services/webhookService'
 
 const ICOUNT_API_URL = 'https://api.icount.co.il/api/v3.php/doc/create'
 const VAT_PERCENT    = 17
@@ -384,8 +384,9 @@ export async function generateInvoiceForVisit(
     },
   })
 
-  // ── 9. n8n webhook (fire-and-forget) ─────────────────────────────────
-  // Never awaited to block — runs in background, logs failure only.
+  // ── 9. n8n webhooks (fire-and-forget) ────────────────────────────────
+
+  // 9a. Internal notification webhook (always)
   triggerInvoiceWebhook({
     invoice_id:     invoiceId,
     invoice_url:    invoiceUrl,
@@ -408,6 +409,26 @@ export async function generateInvoiceForVisit(
       console.warn('[webhook] invoice webhook skipped or failed:', result.error)
     }
   })
+
+  // 9b. Customer delivery webhook — only for real invoices with email
+  if (!isDraftMode && invoiceUrl && customer?.email) {
+    triggerInvoiceDeliveryWebhook({
+      invoice_id:     invoiceId,
+      invoice_url:    invoiceUrl,
+      doc_date:       docDate,
+      doc_type_label: docTypeLabel,
+      client_name:    clientName,
+      client_email:   customer.email,
+      total_amount:   row.total_cost,
+      currency:       'ILS',
+      ticket_number:  row.ticket_number,
+      visit_id:       visitId,
+      triggered_at:   new Date().toISOString(),
+      source:         'eps-comp-crm',
+    }).then((result) => {
+      if (!result.sent) console.warn('[webhook] invoice delivery not sent:', result.error)
+    })
+  }
 
   return {
     success:      true,

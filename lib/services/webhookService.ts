@@ -94,6 +94,54 @@ export async function triggerInvitationWebhook(
   }
 }
 
+// ── Invoice delivery to customer ──────────────────────────────────────────
+// Separate webhook fired after a REAL invoice (not draft) is generated.
+// n8n uses this to email the PDF link to the customer.
+
+export interface InvoiceDeliveryPayload {
+  invoice_id:      string
+  invoice_url:     string          // PDF link from iCount
+  doc_date:        string
+  doc_type_label:  string          // 'חשבונית מס' | 'חשבונית מס קבלה'
+  client_name:     string
+  client_email:    string          // customer email — n8n sends to this
+  total_amount:    number
+  currency:        'ILS'
+  ticket_number:   number
+  visit_id:        string
+  triggered_at:    string
+  source:          'eps-comp-crm'
+}
+
+export async function triggerInvoiceDeliveryWebhook(
+  payload: InvoiceDeliveryPayload
+): Promise<WebhookResult> {
+  const url    = process.env.N8N_INVOICE_DELIVERY_WEBHOOK_URL
+  const secret = process.env.N8N_WEBHOOK_SECRET
+
+  if (!url) {
+    return { sent: false, error: 'N8N_INVOICE_DELIVERY_WEBHOOK_URL לא מוגדר' }
+  }
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (secret) headers['Authorization'] = `Bearer ${secret}`
+
+    const res = await fetch(url, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(5000),
+    })
+
+    return { sent: true, status: res.status }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[webhook] triggerInvoiceDeliveryWebhook failed:', msg)
+    return { sent: false, error: msg }
+  }
+}
+
 export async function triggerInvoiceWebhook(
   payload: InvoiceWebhookPayload
 ): Promise<WebhookResult> {

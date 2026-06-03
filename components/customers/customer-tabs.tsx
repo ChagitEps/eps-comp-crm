@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
-export type TabId = 'details' | 'contacts' | 'tickets' | 'visits' | 'equipment' | 'documents'
+export type TabId = 'details' | 'contacts' | 'tickets' | 'visits' | 'equipment' | 'documents' | 'billing'
 
 interface Tab {
   id: TabId

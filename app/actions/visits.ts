@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantId } from '@/lib/supabase/get-tenant'
+import { finalizeVisitBilling } from '@/app/actions/billing'
 import type { VisitType, VisitStatus } from '@/types'
 
 export interface SelectedWarehouseItem {
@@ -175,7 +176,28 @@ export async function updateVisitStatus(
 
   if (error) return { error: 'שגיאה בעדכון הסטטוס.' }
 
+  // ── Auto-calculate billing when visit is completed ───────────────────
+  // Only run if billing hasn't been finalized yet (billing_status = 'pending' or null)
+  if (status === 'completed') {
+    const { data: visit } = await supabase
+      .from('visits')
+      .select('billing_status, total_cost')
+      .eq('id', visitId)
+      .single()
+
+    const notYetFinalized = !visit?.billing_status || visit.billing_status === 'pending'
+    const noCostYet       = !visit?.total_cost || Number(visit.total_cost) === 0
+
+    if (notYetFinalized || noCostYet) {
+      // fire-and-forget: don't fail the status update if billing calc fails
+      finalizeVisitBilling(visitId).catch((err) => {
+        console.error('[visits] auto-billing failed for visit', visitId, err)
+      })
+    }
+  }
+
   revalidatePath('/visits')
+  revalidatePath('/finance')
   revalidatePath(`/visits/${visitId}`)
   return {}
 }
