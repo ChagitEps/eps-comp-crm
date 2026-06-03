@@ -4,7 +4,10 @@
 -- Run in Supabase SQL Editor
 -- =====================================================
 
-CREATE OR REPLACE VIEW visits_billing_summary AS
+-- DROP first — CREATE OR REPLACE cannot change column order/add columns mid-list
+DROP VIEW IF EXISTS visits_billing_summary;
+
+CREATE VIEW visits_billing_summary AS
 SELECT
   v.id,
   v.tenant_id,
