@@ -8,6 +8,7 @@ import { GoogleSyncButton } from '@/components/visits/google-sync-button'
 import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
 import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-button'
 import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
+import { VisitTimer } from '@/components/visits/visit-timer'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
 import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
 import { cn } from '@/lib/utils'
@@ -149,6 +150,16 @@ export default async function VisitDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* Timer — shown for scheduled and in-progress visits */}
+      {(visit.status === 'scheduled' || visit.status === 'in_progress' || visit.status === 'completed') && (
+        <VisitTimer
+          visitId={id}
+          status={visit.status}
+          startTime={visit.start_time ?? null}
+          durationMinutes={visit.duration_minutes ?? null}
+        />
+      )}
 
       {/* Work description */}
       {visit.work_description && (

@@ -202,6 +202,66 @@ export async function updateVisitStatus(
   return {}
 }
 
+// ── Timer actions ─────────────────────────────────────────────────────────
+
+export async function startVisit(visitId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('visits')
+    .update({
+      status:     'in_progress',
+      start_time: new Date().toISOString(),
+      end_time:   null,
+    })
+    .eq('id', visitId)
+
+  if (error) return { error: 'שגיאה בהתחלת הביקור.' }
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/visits')
+  revalidatePath('/calendar')
+  return {}
+}
+
+export async function endVisit(visitId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  // Fetch start_time to calculate duration
+  const { data: visit } = await supabase
+    .from('visits')
+    .select('start_time')
+    .eq('id', visitId)
+    .single()
+
+  const now      = new Date()
+  const endIso   = now.toISOString()
+  const startMs  = visit?.start_time ? new Date(visit.start_time).getTime() : now.getTime()
+  const diffMins = Math.max(1, Math.round((now.getTime() - startMs) / 60000))
+
+  const { error } = await supabase
+    .from('visits')
+    .update({
+      status:           'completed',
+      end_time:         endIso,
+      duration_minutes: diffMins,
+    })
+    .eq('id', visitId)
+
+  if (error) return { error: 'שגיאה בסיום הביקור.' }
+
+  // Auto-calculate billing (same logic as updateVisitStatus 'completed')
+  finalizeVisitBilling(visitId).catch((err) => {
+    console.error('[visits] endVisit billing failed:', visitId, err)
+  })
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/visits')
+  revalidatePath('/finance')
+  revalidatePath('/calendar')
+  return {}
+}
+
 export async function updateVisit(visitId: string, data: VisitFormData): Promise<ActionResult> {
   const errors = validateVisit(data)
   if (Object.keys(errors).length > 0) return { errors }
