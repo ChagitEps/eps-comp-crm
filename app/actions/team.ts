@@ -125,25 +125,30 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
     return { error: `שגיאה ביצירת הפרופיל: ${profileError.message}` }
   }
 
-  // ── Fire n8n webhook (non-blocking) ──────────────────────────────────
+  // ── Fire n8n webhook — awaited (Server Actions don't support fire-and-forget) ──
   const linkExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-  triggerInvitationWebhook({
-    technician_email:  email,
-    technician_name:   data.full_name.trim(),
-    technician_role:   USER_ROLE_LABELS[data.role as UserRole] ?? data.role,
-    invitation_link:   invitationLink,
-    link_expires_at:   linkExpiresAt,
-    invited_by_name:   admin.fullName,
-    invited_by_email:  admin.email,
-    company_name:      'EPS COMP',
-    triggered_at:      new Date().toISOString(),
-    source:            'eps-comp-crm',
-  }).then((result) => {
-    if (!result.sent) {
-      console.warn('[webhook] invitation webhook not sent:', result.error)
-    }
+  const webhookResult = await triggerInvitationWebhook({
+    // ─── מי מוזמן ────────────────────────────────
+    technician_email: email,
+    technician_name:  data.full_name.trim(),
+    technician_role:  USER_ROLE_LABELS[data.role as UserRole] ?? data.role,
+    technician_phone: data.phone.trim() || null,
+    // ─── קישור כניסה ─────────────────────────────
+    invitation_link:  invitationLink,
+    link_expires_at:  linkExpiresAt,
+    // ─── מי הזמין ────────────────────────────────
+    invited_by_name:  admin.fullName,
+    invited_by_email: admin.email,
+    company_name:     'EPS COMP',
+    // ─── metadata ────────────────────────────────
+    triggered_at:     new Date().toISOString(),
+    source:           'eps-comp-crm',
   })
+
+  if (!webhookResult.sent) {
+    console.warn('[inviteTechnician] webhook not sent:', webhookResult.error)
+  }
 
   revalidatePath('/settings/team')
   return {}

@@ -51,14 +51,19 @@ export interface WebhookResult {
 // ── Invitation webhook payload ────────────────────────────────────────────
 
 export interface InvitationWebhookPayload {
-  technician_email:  string
-  technician_name:   string
-  technician_role:   string          // 'טכנאי ראשי' | 'טכנאי' | 'מנהל/ת חשבונות'
-  invitation_link:   string          // Supabase magic-link — single use
-  link_expires_at:   string          // ISO — Supabase invite links expire after 24h
-  invited_by_name:   string          // admin full_name
-  invited_by_email:  string          // admin email
-  company_name:      string          // tenant / company name (EPS COMP)
+  // ─── מי מוזמן ─────────────────────────────────
+  technician_email:  string           // כתובת האימייל של הטכנאי
+  technician_name:   string           // שם מלא
+  technician_role:   string           // 'טכנאי ראשי' | 'טכנאי' | 'מנהל/ת חשבונות'
+  technician_phone:  string | null    // טלפון (אופציונלי)
+  // ─── קישור כניסה ──────────────────────────────
+  invitation_link:   string           // Supabase magic-link — single use
+  link_expires_at:   string           // ISO — פג תוקף אחרי 24 שעות
+  // ─── מי הזמין ─────────────────────────────────
+  invited_by_name:   string           // שם המנהל שהזמין
+  invited_by_email:  string           // אימייל המנהל
+  company_name:      string           // EPS COMP
+  // ─── metadata ─────────────────────────────────
   triggered_at:      string
   source:            'eps-comp-crm'
 }
