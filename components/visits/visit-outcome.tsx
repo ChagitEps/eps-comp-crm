@@ -35,7 +35,7 @@ const OUTCOMES: { id: OutcomeId; label: string; desc: string; icon: React.Elemen
   },
   {
     id:    'follow_up',
-    label: 'נדרש ביקור המשך',
+    label: 'נדרש טיפול המשך בביקורים',
     desc:  'הקריאה תישאר "בטיפול" ותוכל לתזמן ביקור נוסף',
     icon:  RefreshCw,
     color: 'border-blue-300 bg-blue-50 text-blue-800 hover:border-blue-400',
