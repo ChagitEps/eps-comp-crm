@@ -2,18 +2,35 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { CalendarDays, Check, Loader2, AlertCircle } from 'lucide-react'
+import { CalendarDays, Check, Loader2, AlertCircle, Link2 } from 'lucide-react'
 import { syncVisitToGoogleCalendar } from '@/app/actions/google-calendar'
 
 interface GoogleSyncButtonProps {
-  visitId: string
+  visitId:     string
+  isConnected: boolean   // does THIS technician have a google_refresh_token?
+  connectUrl:  string    // /api/auth/google?... — generated server-side
 }
 
-export function GoogleSyncButton({ visitId }: GoogleSyncButtonProps) {
+export function GoogleSyncButton({ visitId, isConnected, connectUrl }: GoogleSyncButtonProps) {
   const [isPending, startTransition] = useTransition()
-  const [result, setResult] = useState<'success' | 'error' | null>(null)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [result,    setResult]       = useState<'success' | 'error' | null>(null)
+  const [errorMsg,  setErrorMsg]     = useState('')
 
+  // ── Not connected — show connect link ──────────────────────────────────
+  if (!isConnected) {
+    return (
+      <a
+        href={connectUrl}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary border border-border rounded-lg px-2.5 py-1.5 transition-colors"
+        title="חבר את יומן ה-Google שלך"
+      >
+        <Link2 className="h-3.5 w-3.5" />
+        חבר Google Calendar
+      </a>
+    )
+  }
+
+  // ── Connected — sync button ────────────────────────────────────────────
   function handleSync() {
     setResult(null)
     startTransition(async () => {

@@ -58,12 +58,19 @@ export default async function VisitDetailPage({ params }: PageProps) {
   const technician = visit.technician as { full_name: string; hourly_rate: number | null } | null
   const customer = ticket?.customer ?? null
 
-  // current user role — GenerateInvoiceButton shown to admin only
+  // current user — role + Google Calendar connection status
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = user
-    ? await supabase.from('profiles').select('role').eq('id', user.id).single()
+    ? await supabase.from('profiles')
+        .select('role, google_refresh_token')
+        .eq('id', user.id).single()
     : { data: null }
   const userRole: UserRole = (profile?.role as UserRole) ?? 'technician_junior'
+
+  // Google Calendar: connected = current user has a stored token
+  const isGoogleConnected = !!(profile as { google_refresh_token?: string | null } | null)?.google_refresh_token
+  const visitReturnTo     = `/visits/${id}`
+  const googleConnectUrl  = `/api/auth/google?return_to=${encodeURIComponent(visitReturnTo)}`
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -108,7 +115,11 @@ export default async function VisitDetailPage({ params }: PageProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <GoogleSyncButton visitId={id} />
+            <GoogleSyncButton
+              visitId={id}
+              isConnected={isGoogleConnected}
+              connectUrl={googleConnectUrl}
+            />
             <Link
               href={`/visits/${id}/edit`}
               className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
