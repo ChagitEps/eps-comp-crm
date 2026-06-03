@@ -92,7 +92,7 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
         {savedOutcome === 'follow_up' && (
           <div className="flex items-center gap-2 pt-1">
             <Link
-              href={`/visits/new?ticket=${ticketId}`}
+              href={`/visits/new?ticket=${ticketId}&prev_visit=${visitId}`}
               className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
             >
               <Plus className="h-4 w-4" />
