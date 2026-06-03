@@ -262,6 +262,63 @@ export async function endVisit(visitId: string): Promise<ActionResult> {
   return {}
 }
 
+// ── Close visit with manually entered duration ────────────────────────────
+export async function endVisitManual(
+  visitId: string,
+  hours:   number,
+  minutes: number
+): Promise<ActionResult> {
+  const totalMins = Math.max(1, hours * 60 + minutes)
+  const supabase  = await createClient()
+
+  const { error } = await supabase
+    .from('visits')
+    .update({
+      status:           'completed',
+      end_time:         new Date().toISOString(),
+      duration_minutes: totalMins,
+    })
+    .eq('id', visitId)
+
+  if (error) return { error: 'שגיאה בשמירת הזמן.' }
+
+  finalizeVisitBilling(visitId).catch((err) => {
+    console.error('[visits] endVisitManual billing failed:', visitId, err)
+  })
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/visits')
+  revalidatePath('/finance')
+  revalidatePath('/calendar')
+  return {}
+}
+
+// ── Fix duration on already-completed visit ───────────────────────────────
+export async function fixVisitDuration(
+  visitId: string,
+  hours:   number,
+  minutes: number
+): Promise<ActionResult> {
+  const totalMins = Math.max(1, hours * 60 + minutes)
+  const supabase  = await createClient()
+
+  const { error } = await supabase
+    .from('visits')
+    .update({ duration_minutes: totalMins })
+    .eq('id', visitId)
+
+  if (error) return { error: 'שגיאה בעדכון המשך.' }
+
+  // Recalculate billing with new duration
+  finalizeVisitBilling(visitId).catch((err) => {
+    console.error('[visits] fixVisitDuration billing failed:', visitId, err)
+  })
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/finance')
+  return {}
+}
+
 export async function updateVisit(visitId: string, data: VisitFormData): Promise<ActionResult> {
   const errors = validateVisit(data)
   if (Object.keys(errors).length > 0) return { errors }
