@@ -6,6 +6,298 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantId } from '@/lib/supabase/get-tenant'
 import type { TicketStatus, TicketUrgency, TicketChannel } from '@/types'
 
+// ── SLA hours by urgency ──────────────────────────────────────────────────
+const SLA_HOURS: Record<TicketUrgency, number> = {
+  critical: 4,    // emergency / קריטי
+  high:     8,    // גבוהה
+  medium:   24,   // בינונית
+  low:      72,   // נמוכה
+}
+
+function calcSlaAt(urgency: TicketUrgency): string {
+  const hours = SLA_HOURS[urgency] ?? 24
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+}
+
+// ── Emergency alert placeholder ───────────────────────────────────────────
+// TODO: replace with real WhatsApp/Email integration (n8n webhook or direct API)
+async function triggerEmergencyAlert(payload: {
+  ticketId:     string
+  ticketNumber: number
+  customerName: string
+  title:        string
+  tenantId:     string
+}): Promise<void> {
+  const webhookUrl = process.env.N8N_EMERGENCY_WEBHOOK_URL
+  if (!webhookUrl) {
+    console.warn('[emergency] N8N_EMERGENCY_WEBHOOK_URL not set — skipping alert for ticket', payload.ticketId)
+    return
+  }
+  try {
+    await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ...payload, triggered_at: new Date().toISOString(), source: 'eps-comp-crm' }),
+      signal:  AbortSignal.timeout(5000),
+    })
+  } catch (err) {
+    console.error('[emergency] webhook failed:', err)
+  }
+}
+
+// ── Insert a notification ─────────────────────────────────────────────────
+async function insertNotification(supabase: Awaited<ReturnType<typeof createClient>>, payload: {
+  tenantId:  string
+  userId?:   string | null   // null = all admins/seniors in tenant
+  ticketId?: string
+  type:      string
+  title:     string
+  body?:     string
+  metadata?: Record<string, unknown>
+}): Promise<void> {
+  await supabase.from('notifications').insert({
+    tenant_id: payload.tenantId,
+    user_id:   payload.userId ?? null,
+    ticket_id: payload.ticketId ?? null,
+    type:      payload.type,
+    title:     payload.title,
+    body:      payload.body ?? null,
+    metadata:  payload.metadata ?? null,
+  })
+}
+
+// ── handleNewTicket ───────────────────────────────────────────────────────
+//
+// Full business-logic ticket creation handler (Module 3 + 13 + 14).
+//
+// Business rules:
+//   1. VIP customer   → urgency upgraded to 'critical' automatically
+//   2. SLA            → sla_due_at calculated from urgency
+//   3. New customer   → find-or-create customer + contact before inserting ticket
+//   4. Equipment      → linked in ticket_equipment junction table
+//   5. Notifications  → inserted for assigned technician and/or all admins
+//   6. Emergency      → WhatsApp/Email alert placeholder fired if urgency = 'critical'
+//
+export interface NewTicketData {
+  // ── Existing customer (supply one of these) ───────────────
+  customer_id?: string                   // for existing customers
+
+  // ── New customer (website / WhatsApp form) ─────────────────
+  customer_name?:          string
+  customer_email?:         string
+  customer_phone?:         string
+  customer_business_name?: string
+
+  // ── Ticket fields ─────────────────────────────────────────
+  title:                   string
+  description?:            string
+  urgency:                 TicketUrgency | ''
+  service_type?:           string
+  open_channel:            TicketChannel
+  assigned_technician_id?: string
+  internal_notes?:         string
+
+  // ── Equipment to link ─────────────────────────────────────
+  equipment_ids?: string[]              // existing equipment UUIDs to link
+}
+
+export interface HandleTicketResult {
+  ticketId?:    string
+  redirectUrl?: string
+  error?:       string
+  errors?:      Record<string, string>
+}
+
+export async function handleNewTicket(data: NewTicketData): Promise<HandleTicketResult> {
+  // ── Validation ────────────────────────────────────────────────────────
+  const errors: Record<string, string> = {}
+  if (!data.title?.trim())     errors.title    = 'כותרת חסרה'
+  if (!data.urgency)           errors.urgency  = 'יש לבחור דחיפות'
+  if (!data.open_channel)      errors.open_channel = 'יש לבחור ערוץ פנייה'
+  if (!data.customer_id && !data.customer_name) {
+    errors.customer = 'יש לבחור לקוח קיים או להזין שם לקוח חדש'
+  }
+  if (Object.keys(errors).length > 0) return { errors }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // ── Step 1: Resolve customer ID ───────────────────────────────────────
+  let customerId = data.customer_id ?? ''
+  let customerName = ''
+  let isVip = false
+
+  if (customerId) {
+    // Existing customer — fetch status for VIP check
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('id, name, business_name, customer_status')
+      .eq('id', customerId)
+      .eq('tenant_id', tenantId)
+      .eq('is_deleted', false)
+      .single()
+
+    if (!customer) return { error: 'לקוח לא נמצא במערכת.' }
+
+    customerName = customer.business_name ?? customer.name
+    isVip = customer.customer_status === 'vip'
+
+  } else {
+    // New customer via external form — find-or-create
+    const name  = (data.customer_name ?? '').trim()
+    const email = (data.customer_email ?? '').trim().toLowerCase() || null
+    const phone = (data.customer_phone ?? '').trim() || null
+
+    // Try to find by email or phone first
+    let existingId: string | null = null
+    if (email) {
+      const { data: byEmail } = await supabase
+        .from('customers').select('id').eq('email', email).eq('tenant_id', tenantId).single()
+      existingId = byEmail?.id ?? null
+    }
+    if (!existingId && phone) {
+      const { data: byPhone } = await supabase
+        .from('customers').select('id').eq('phone', phone).eq('tenant_id', tenantId).single()
+      existingId = byPhone?.id ?? null
+    }
+
+    if (existingId) {
+      customerId   = existingId
+      customerName = name
+    } else {
+      // Create new customer
+      const { data: newCustomer, error: custErr } = await supabase
+        .from('customers')
+        .insert({
+          tenant_id:     tenantId,
+          name,
+          business_name: data.customer_business_name?.trim() || null,
+          email,
+          phone,
+          billing_model: 'pay_per_visit',
+          customer_status: 'occasional',
+        })
+        .select('id')
+        .single()
+
+      if (custErr || !newCustomer) return { error: 'שגיאה ביצירת הלקוח.' }
+
+      customerId   = newCustomer.id
+      customerName = name
+
+      // Create contact record if email/phone provided
+      if (email || phone) {
+        await supabase.from('contacts').insert({
+          tenant_id:   tenantId,
+          customer_id: customerId,
+          name,
+          phones:      phone ? [phone] : [],
+          email,
+        })
+      }
+    }
+  }
+
+  // ── Step 2: VIP override ──────────────────────────────────────────────
+  let urgency = (data.urgency || 'medium') as TicketUrgency
+  if (isVip && urgency !== 'critical') {
+    urgency = 'critical'   // VIP → automatic emergency upgrade
+  }
+
+  // ── Step 3: SLA calculation ───────────────────────────────────────────
+  const slaAt = calcSlaAt(urgency)
+
+  // ── Step 4: Insert ticket ─────────────────────────────────────────────
+  const { data: ticket, error: ticketErr } = await supabase
+    .from('tickets')
+    .insert({
+      tenant_id:              tenantId,
+      customer_id:            customerId,
+      opened_by:              user?.id ?? null,
+      assigned_technician_id: data.assigned_technician_id || null,
+      title:                  data.title.trim(),
+      description:            data.description?.trim() || null,
+      urgency,
+      service_type:           data.service_type?.trim() || null,
+      open_channel:           data.open_channel,
+      internal_notes:         data.internal_notes?.trim() || null,
+      status:                 'new',
+      sla_due_at:             slaAt,
+    })
+    .select('id, ticket_number')
+    .single()
+
+  if (ticketErr || !ticket) return { error: 'שגיאה בפתיחת הקריאה.' }
+
+  const ticketId = ticket.id as string
+  const ticketNumber = ticket.ticket_number as number
+
+  // ── Step 5: Link equipment ────────────────────────────────────────────
+  if (data.equipment_ids && data.equipment_ids.length > 0) {
+    const equipmentRows = data.equipment_ids.map(eqId => ({
+      tenant_id:    tenantId,
+      ticket_id:    ticketId,
+      equipment_id: eqId,
+    }))
+    await supabase.from('ticket_equipment').insert(equipmentRows)
+  }
+
+  // ── Step 6: Notifications ─────────────────────────────────────────────
+  const notifTitle   = `קריאה חדשה #${ticketNumber}: ${data.title.trim()}`
+  const notifBody    = `לקוח: ${customerName} | דחיפות: ${urgency}`
+  const notifMeta    = { customer_name: customerName, urgency, ticket_number: ticketNumber }
+
+  if (data.assigned_technician_id) {
+    // Notify assigned technician specifically
+    await insertNotification(supabase, {
+      tenantId, ticketId,
+      userId:   data.assigned_technician_id,
+      type:     'ticket_assigned',
+      title:    notifTitle,
+      body:     notifBody,
+      metadata: notifMeta,
+    })
+  }
+
+  // Broadcast to all admins (user_id = null → all admins/seniors see it)
+  await insertNotification(supabase, {
+    tenantId, ticketId,
+    userId:   null,
+    type:     urgency === 'critical' ? 'ticket_emergency' : 'new_ticket',
+    title:    urgency === 'critical' ? `🚨 ${notifTitle}` : notifTitle,
+    body:     notifBody,
+    metadata: { ...notifMeta, sla_due_at: slaAt, is_vip_upgrade: isVip },
+  })
+
+  // ── Step 7: Emergency alert ───────────────────────────────────────────
+  if (urgency === 'critical') {
+    triggerEmergencyAlert({
+      ticketId, ticketNumber, customerName,
+      title:    data.title.trim(),
+      tenantId,
+    })   // fire-and-forget
+  }
+
+  // ── Audit log ─────────────────────────────────────────────────────────
+  await supabase.from('audit_logs').insert({
+    user_id:     user?.id ?? null,
+    action:      'ticket_created',
+    entity_type: 'ticket',
+    entity_id:   ticketId,
+    after_data: {
+      urgency, sla_due_at: slaAt, customer_id: customerId,
+      is_vip_upgrade: isVip, open_channel: data.open_channel,
+    },
+  })
+
+  revalidatePath('/tickets')
+  revalidatePath('/')
+
+  return { ticketId, redirectUrl: `/tickets/${ticketId}` }
+}
+
 export interface TicketFormData {
   customer_id: string
   title: string

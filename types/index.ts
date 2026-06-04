@@ -555,3 +555,55 @@ export const STOCK_STATUS_COLORS: Record<StockStatus, string> = {
   low_stock: 'text-orange-600',
   out_of_stock: 'text-red-600',
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'new_ticket'
+  | 'ticket_emergency'
+  | 'ticket_assigned'
+  | 'ticket_updated'
+  | 'visit_started'
+  | 'visit_completed'
+  | 'sla_breach'
+  | 'invoice_created'
+  | 'low_stock'
+
+export interface Notification {
+  id:         string
+  tenant_id:  string
+  user_id:    string | null
+  ticket_id:  string | null
+  visit_id:   string | null
+  type:       NotificationType
+  title:      string
+  body:       string | null
+  metadata:   Record<string, unknown> | null
+  is_read:    boolean
+  read_at:    string | null
+  created_at: string
+}
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  new_ticket:       'קריאה חדשה',
+  ticket_emergency: '🚨 קריאה דחופה',
+  ticket_assigned:  'קריאה שויכה אליך',
+  ticket_updated:   'עדכון קריאה',
+  visit_started:    'ביקור התחיל',
+  visit_completed:  'ביקור הסתיים',
+  sla_breach:       '⏰ SLA עבר',
+  invoice_created:  'חשבונית הופקה',
+  low_stock:        'מלאי נמוך',
+}
+
+export const NOTIFICATION_TYPE_COLORS: Record<NotificationType, string> = {
+  new_ticket:       'bg-blue-100 text-blue-800',
+  ticket_emergency: 'bg-red-100 text-red-800',
+  ticket_assigned:  'bg-purple-100 text-purple-800',
+  ticket_updated:   'bg-gray-100 text-gray-700',
+  visit_started:    'bg-emerald-100 text-emerald-800',
+  visit_completed:  'bg-green-100 text-green-800',
+  sla_breach:       'bg-orange-100 text-orange-800',
+  invoice_created:  'bg-teal-100 text-teal-800',
+  low_stock:        'bg-yellow-100 text-yellow-800',
+}
