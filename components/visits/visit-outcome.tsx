@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   CheckCircle2, RefreshCw, Clock, ChevronDown,
-  Loader2, Plus, AlertCircle,
+  Loader2, PlusCircle, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { updateTicketStatus } from '@/app/actions/tickets'
 import { cn } from '@/lib/utils'
 import type { TicketStatus } from '@/types'
@@ -35,8 +35,8 @@ const OUTCOMES: { id: OutcomeId; label: string; desc: string; icon: React.Elemen
   },
   {
     id:    'follow_up',
-    label: 'נדרש טיפול המשך בביקורים',
-    desc:  'הקריאה תישאר "בטיפול" ותוכל לתזמן ביקור נוסף',
+    label: 'נדרש טיפול נוסף',
+    desc:  'הקריאה תישאר "בטיפול" — ניתן לפתוח ביקור נוסף לאחר אישור',
     icon:  RefreshCw,
     color: 'border-blue-300 bg-blue-50 text-blue-800 hover:border-blue-400',
   },
@@ -90,15 +90,13 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
         </div>
 
         {savedOutcome === 'follow_up' && (
-          <div className="flex items-center gap-2 pt-1">
-            <Link
-              href={`/visits/new?ticket=${ticketId}&prev_visit=${visitId}`}
-              className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
-            >
-              <Plus className="h-4 w-4" />
-              פתח ביקור המשך
-            </Link>
-          </div>
+          <a
+            href={`/visits/new?ticket=${ticketId}&prev_visit=${visitId}`}
+            className={buttonVariants({ className: 'gap-2 w-full justify-center' })}
+          >
+            <PlusCircle className="h-4 w-4" />
+            פתח ביקור נוסף
+          </a>
         )}
       </div>
     )

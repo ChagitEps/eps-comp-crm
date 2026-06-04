@@ -10,6 +10,8 @@ import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-butt
 import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
 import { VisitTimer } from '@/components/visits/visit-timer'
 import { VisitOutcome } from '@/components/visits/visit-outcome'
+import { PreviousVisitsSummary } from '@/components/visits/previous-visits-summary'
+import type { PreviousVisitRow } from '@/components/visits/previous-visits-summary'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
 import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
 import { cn } from '@/lib/utils'
@@ -58,6 +60,28 @@ export default async function VisitDetailPage({ params }: PageProps) {
 
   const technician = visit.technician as { full_name: string; hourly_rate: number | null } | null
   const customer = ticket?.customer ?? null
+
+  // Fetch other visits for the same ticket (for the summary panel)
+  const ticketIdForVisits = (visit.ticket as unknown as { id: string } | null)?.id
+  const { data: otherVisitsRaw } = ticketIdForVisits
+    ? await supabase
+        .from('visits')
+        .select('id, start_time, duration_minutes, visit_type, status, work_description, notes, technician:technician_id(full_name)')
+        .eq('ticket_id', ticketIdForVisits)
+        .neq('id', id)
+        .order('start_time', { ascending: false })
+    : { data: [] }
+
+  const previousVisits: PreviousVisitRow[] = (otherVisitsRaw ?? []).map(v => ({
+    id:               v.id as string,
+    start_time:       v.start_time as string | null,
+    duration_minutes: v.duration_minutes as number | null,
+    visit_type:       v.visit_type as string,
+    status:           v.status as string,
+    work_description: v.work_description as string | null,
+    notes:            v.notes as string | null,
+    technician_name:  (v.technician as unknown as { full_name: string } | null)?.full_name ?? null,
+  }))
 
   // current user — role + Google Calendar connection status
   const { data: { user } } = await supabase.auth.getUser()
@@ -170,6 +194,14 @@ export default async function VisitDetailPage({ params }: PageProps) {
           status={visit.status}
           startTime={visit.start_time ?? null}
           durationMinutes={visit.duration_minutes ?? null}
+        />
+      )}
+
+      {/* Previous visits for same ticket */}
+      {previousVisits.length > 0 && (
+        <PreviousVisitsSummary
+          visits={previousVisits}
+          ticketNumber={ticket?.ticket_number}
         />
       )}
 
