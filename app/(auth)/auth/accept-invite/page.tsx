@@ -13,20 +13,26 @@ export default function AcceptInvitePage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [userEmail, setUserEmail]     = useState<string | null>(null)
-  const [password,  setPassword]      = useState('')
-  const [confirm,   setConfirm]       = useState('')
-  const [showPass,  setShowPass]      = useState(false)
-  const [error,     setError]         = useState<string | null>(null)
-  const [loading,   setLoading]       = useState(false)
-  const [done,      setDone]          = useState(false)
-  const [checking,  setChecking]      = useState(true)
+  const [userEmail,    setUserEmail]    = useState<string | null>(null)
+  const [isExisting,   setIsExisting]   = useState(false)   // true = already-logged-in user
+  const [password,     setPassword]     = useState('')
+  const [confirm,      setConfirm]      = useState('')
+  const [showPass,     setShowPass]     = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [loading,      setLoading]      = useState(false)
+  const [done,         setDone]         = useState(false)
+  const [checking,     setChecking]     = useState(true)
 
-  // ── Verify the invite session exists ────────────────────────────────
+  // ── Verify the invite session ─────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUserEmail(data.user.email ?? null)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUserEmail(session.user.email ?? null)
+        // Detect if this is a pre-existing session (not a fresh invite token).
+        // Invite sessions have amr containing 'link' or last_sign_in very recent.
+        const isInvite = session.user.app_metadata?.provider === 'email' &&
+          !session.user.confirmed_at   // unconfirmed = freshly invited
+        setIsExisting(!isInvite && !!session.user.confirmed_at)
       }
       setChecking(false)
     })
@@ -110,6 +116,47 @@ export default function AcceptInvitePage() {
             <p className="text-sm text-muted-foreground mt-1">הסיסמה הוגדרה בהצלחה. מעביר אותך למערכת...</p>
           </div>
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mx-auto" />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Already-logged-in user warning ───────────────────────────────
+  if (isExisting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <div className="w-full max-w-sm space-y-4">
+          <div className="text-center space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+                <Monitor className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <span className="text-2xl font-bold">EPS COMP</span>
+            </div>
+          </div>
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-5 space-y-3">
+            <p className="text-sm font-semibold text-amber-800">⚠️ קישור ההזמנה נפתח בדפדפן שבו אתה כבר מחובר</p>
+            <p className="text-xs text-amber-700">
+              הקישור שנשלח לטכנאי חייב להיפתח בדפדפן נקי (Incognito / פרטי) שבו אין חשבון מחובר.
+            </p>
+            <div className="space-y-1.5 text-xs text-amber-800">
+              <p className="font-medium">הוראות לטכנאי החדש:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>פתח <strong>Chrome / Edge / Firefox</strong></li>
+                <li>לחץ <strong>Ctrl+Shift+N</strong> (חלון פרטי)</li>
+                <li>הדבק את קישור ההזמנה שקיבלת במייל</li>
+              </ol>
+            </div>
+            <button
+              onClick={() => setIsExisting(false)}
+              className="text-xs text-amber-600 underline hover:text-amber-800"
+            >
+              אני מבין, המשך בכל זאת (הסיסמה תוגדר לחשבון הנוכחי: {userEmail})
+            </button>
+          </div>
+          <button onClick={() => router.push('/')} className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
+            חזור לדשבורד
+          </button>
         </div>
       </div>
     )
