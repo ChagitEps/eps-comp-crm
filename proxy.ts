@@ -36,8 +36,11 @@ export async function proxy(request: NextRequest) {
 
   // Public routes — no auth required
   const publicRoutes = ['/login']
-  // Accept-invite: authenticated user sets their password — must NOT redirect away
-  const allowAuthenticatedRoutes = ['/auth/accept-invite']
+  // Auth flow routes — bypass redirect logic entirely
+  const allowAuthenticatedRoutes = [
+    '/auth/accept-invite',   // new user sets their password
+    '/auth/callback',        // OAuth code exchange (Google login)
+  ]
 
   if (publicRoutes.includes(pathname)) {
     if (user) {
