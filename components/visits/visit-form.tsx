@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import {
   Select, SelectContent, SelectItem, SelectTrigger,
 } from '@/components/ui/select'
-import { Loader2, Clock, Calculator, Package } from 'lucide-react'
+import { Loader2, Clock, Calculator, Package, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VISIT_TYPE_LABELS } from '@/types'
 import type { Profile, VisitType, UserRole } from '@/types'
@@ -20,6 +20,8 @@ import {
 import {
   WarehouseItemsPicker, type WarehousePickerItem, type SelectedItem,
 } from './warehouse-items-picker'
+
+interface CustomItem { name: string; price: string }
 
 interface VisitContext {
   ticketId: string
@@ -84,6 +86,8 @@ export function VisitForm({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
+  const [customItems, setCustomItems] = useState<CustomItem[]>([])
+  const [customItemForm, setCustomItemForm] = useState({ name: '', price: '' })
 
   const [form, setForm] = useState<VisitFormData>({
     ticket_id: context.ticketId,
@@ -109,9 +113,9 @@ export function VisitForm({
   const warehouseEquipmentCost = selectedItems.reduce(
     (sum, s) => sum + (s.unit_price ?? 0) * s.qty, 0
   )
-  // Allow extra manual cost on top (for items not in warehouse)
-  const manualExtra = parseFloat(form.equipment_cost) || 0
-  const totalEquipmentCost = warehouseEquipmentCost + manualExtra
+  // Custom items (non-warehouse parts typed manually by technician)
+  const customItemsTotal = customItems.reduce((s, i) => s + (parseFloat(i.price) || 0), 0)
+  const totalEquipmentCost = warehouseEquipmentCost + customItemsTotal
 
   const durationLabel = calcDurationLabel(form.start_time, form.end_time)
   const workCost = calcWorkCost(form.start_time, form.end_time, context.technicianHourlyRate, isContract)
@@ -122,11 +126,20 @@ export function VisitForm({
   const selectedTech = technicians.find(t => t.id === form.technician_id)
   const selectedType = form.visit_type ? VISIT_TYPE_LABELS[form.visit_type as VisitType] : null
 
+  function addCustomItem() {
+    if (!customItemForm.name.trim() || !customItemForm.price) return
+    setCustomItems(items => [...items, { ...customItemForm }])
+    setCustomItemForm({ name: '', price: '' })
+  }
+
+  function removeCustomItem(index: number) {
+    setCustomItems(items => items.filter((_, i) => i !== index))
+  }
+
   function handleSubmit() {
     setErrors({})
     setGlobalError('')
     startTransition(async () => {
-      // Inject selected items and calculated equipment cost into form data
       const submitData: VisitFormData = {
         ...form,
         equipment_cost: totalEquipmentCost.toString(),
@@ -262,16 +275,62 @@ export function VisitForm({
           userRole={userRole}
         />
 
-        {/* Extra manual cost for items not in warehouse */}
-        <div className="space-y-1.5">
-          <Label>עלות ציוד נוסף ידנית (₪)</Label>
-          <Input type="number" min="0" step="0.01" dir="ltr"
-            value={form.equipment_cost}
-            onChange={e => set('equipment_cost', e.target.value)}
-            placeholder="0.00" />
-          <p className="text-xs text-muted-foreground">
-            לפריטים שאינם במחסן (מתווסף לסכום הפריטים שנבחרו)
-          </p>
+        {/* Custom items — parts not in warehouse (no stock decrement) */}
+        <div className="space-y-3">
+          <Label className="text-xs text-muted-foreground">פריטים מותאמים אישית (אינם מהמחסן)</Label>
+          <div className="flex gap-2">
+            <Input
+              value={customItemForm.name}
+              onChange={e => setCustomItemForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="שם הפריט (כונן SSD, ספק כוח...)"
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              dir="ltr"
+              value={customItemForm.price}
+              onChange={e => setCustomItemForm(f => ({ ...f, price: e.target.value }))}
+              placeholder="מחיר (₪)"
+              className="w-28"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addCustomItem}
+              disabled={!customItemForm.name.trim() || !customItemForm.price}
+              className="gap-1 shrink-0"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              הוסף
+            </Button>
+          </div>
+          {customItems.length > 0 && (
+            <div className="grid gap-1.5">
+              {customItems.map((item, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border border-border text-sm">
+                  <span>{item.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground" dir="ltr">₪{parseFloat(item.price).toFixed(2)}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeCustomItem(i)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground text-end">
+                סה״כ פריטים מותאמים: ₪{customItemsTotal.toFixed(2)}
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -301,10 +360,10 @@ export function VisitForm({
                   <span>₪{warehouseEquipmentCost.toFixed(2)}</span>
                 </div>
               )}
-              {manualExtra > 0 && (
+              {customItemsTotal > 0 && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>ציוד ידני:</span>
-                  <span>₪{manualExtra.toFixed(2)}</span>
+                  <span>פריטים מותאמים:</span>
+                  <span>₪{customItemsTotal.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between font-medium border-t border-border pt-1">

@@ -23,7 +23,7 @@ export interface VisitFormData {
   work_description: string
   notes: string
   equipment_cost: string
-  selected_warehouse_items: SelectedWarehouseItem[]  // NEW
+  selected_warehouse_items: SelectedWarehouseItem[]
 }
 
 export interface ActionResult {
@@ -73,13 +73,13 @@ export async function createVisit(data: VisitFormData): Promise<ActionResult> {
       .single(),
     supabase
       .from('tickets')
-      .select('customer:customers(billing_model)')
+      .select('customer:customers(id, billing_model)')
       .eq('id', data.ticket_id)
       .single(),
   ])
 
-  const isContract =
-    (ticket?.customer as unknown as { billing_model: string | null } | null)?.billing_model === 'contract'
+  const ticketCustomer = ticket?.customer as unknown as { id: string; billing_model: string | null } | null
+  const isContract = ticketCustomer?.billing_model === 'contract'
   const hourlyRate = profile?.hourly_rate ?? null
   const durationMinutes = calcDuration(data.start_time, data.end_time)
   const workCost = calcWorkCost(durationMinutes, hourlyRate, isContract)

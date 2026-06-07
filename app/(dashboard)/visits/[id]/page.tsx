@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, Edit, Clock, User, Calendar, Wrench } from 'lucide-react'
+import { ChevronRight, Edit, Clock, User, Calendar, Wrench, Monitor } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -13,7 +13,8 @@ import { VisitOutcome } from '@/components/visits/visit-outcome'
 import { PreviousVisitsSummary } from '@/components/visits/previous-visits-summary'
 import type { PreviousVisitRow } from '@/components/visits/previous-visits-summary'
 import { VISIT_TYPE_LABELS, VISIT_STATUS_LABELS, VISIT_STATUS_COLORS, VISIT_BILLING_STATUS_LABELS, VISIT_BILLING_STATUS_COLORS } from '@/types'
-import type { VisitType, VisitStatus, VisitBillingStatus, UserRole } from '@/types'
+import type { VisitType, VisitStatus, VisitBillingStatus, UserRole, Equipment, VisitEquipmentAction } from '@/types'
+import { VisitEquipmentSelector } from '@/components/equipment/visit-equipment-selector'
 import { cn } from '@/lib/utils'
 
 interface PageProps {
@@ -71,6 +72,25 @@ export default async function VisitDetailPage({ params }: PageProps) {
         .neq('id', id)
         .order('start_time', { ascending: false })
     : { data: [] }
+
+  // Fetch customer equipment + visit-linked equipment (for equipment section)
+  const [
+    { data: linkedEquipmentRaw },
+    { data: customerEquipment },
+  ] = await Promise.all([
+    supabase
+      .from('visit_equipment')
+      .select('id, equipment_id, action, equipment:equipment_id(id, equipment_type, manufacturer, model, serial_number, status)')
+      .eq('visit_id', id),
+    customer?.id
+      ? supabase
+          .from('equipment')
+          .select('id, equipment_type, manufacturer, model, serial_number, status')
+          .eq('customer_id', customer.id)
+          .eq('is_deleted', false)
+          .order('equipment_type')
+      : Promise.resolve({ data: [] }),
+  ])
 
   const previousVisits: PreviousVisitRow[] = (otherVisitsRaw ?? []).map(v => ({
     id:               v.id as string,
@@ -232,6 +252,27 @@ export default async function VisitDetailPage({ params }: PageProps) {
         <div className="bg-card border border-border rounded-xl p-5 space-y-2">
           <h2 className="text-sm font-semibold text-muted-foreground">הערות</h2>
           <p className="text-sm whitespace-pre-wrap">{visit.notes}</p>
+        </div>
+      )}
+
+      {/* Linked Equipment */}
+      {customer?.id && (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Monitor className="h-4 w-4 text-muted-foreground" />
+            ציוד מקושר לביקור
+          </h2>
+          <VisitEquipmentSelector
+            visitId={id}
+            customerId={customer.id}
+            customerEquipment={(customerEquipment ?? []) as Pick<Equipment, 'id' | 'equipment_type' | 'manufacturer' | 'model' | 'serial_number' | 'status'>[]}
+            linkedEquipment={(linkedEquipmentRaw ?? []).map(le => ({
+              id:           le.id as string,
+              equipment_id: le.equipment_id as string,
+              action:       le.action as VisitEquipmentAction | null,
+              equipment:    le.equipment as unknown as Pick<Equipment, 'id' | 'equipment_type' | 'manufacturer' | 'model' | 'serial_number' | 'status'>,
+            }))}
+          />
         </div>
       )}
 

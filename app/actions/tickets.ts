@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getTenantId } from '@/lib/supabase/get-tenant'
 import type { TicketStatus, TicketUrgency, TicketChannel } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { QuickEquipmentData } from '@/app/actions/equipment'
 
 // ── SLA hours by urgency ──────────────────────────────────────────────────
 const SLA_HOURS: Record<TicketUrgency, number> = {
@@ -325,6 +326,25 @@ export interface TicketFormData {
   open_channel: TicketChannel | ''
   assigned_technician_id: string
   internal_notes: string
+  equipment_ids?: string[]
+  new_equipment?: QuickEquipmentData[]
+}
+
+export async function getCustomerEquipment(customerId: string) {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('equipment')
+    .select('id, equipment_type, manufacturer, model, serial_number')
+    .eq('customer_id', customerId)
+    .eq('is_deleted', false)
+    .order('equipment_type')
+  return (data ?? []) as Array<{
+    id: string
+    equipment_type: string
+    manufacturer: string | null
+    model: string | null
+    serial_number: string | null
+  }>
 }
 
 function validateTicket(data: TicketFormData): Record<string, string> {
@@ -376,6 +396,44 @@ export async function createTicket(data: TicketFormData): Promise<ActionResult> 
     .single()
 
   if (error) return { error: 'שגיאה בפתיחת הקריאה. אנא נסה שוב.' }
+
+  // ── Link existing customer equipment ─────────────────────────────────
+  if (data.equipment_ids?.length) {
+    await supabase.from('ticket_equipment').insert(
+      data.equipment_ids.map(eqId => ({
+        tenant_id:    tenantId,
+        ticket_id:    ticket.id,
+        equipment_id: eqId,
+      }))
+    )
+  }
+
+  // ── Create new equipment + link ───────────────────────────────────────
+  if (data.new_equipment?.length) {
+    for (const eq of data.new_equipment) {
+      if (!eq.equipment_type.trim()) continue
+      const { data: newEq } = await supabase
+        .from('equipment')
+        .insert({
+          tenant_id:      tenantId,
+          customer_id:    data.customer_id,
+          equipment_type: eq.equipment_type.trim(),
+          model:          eq.model.trim() || null,
+          serial_number:  eq.serial_number.trim() || null,
+          notes:          eq.notes.trim() || null,
+          status:         'at_customer',
+        })
+        .select('id')
+        .single()
+      if (newEq) {
+        await supabase.from('ticket_equipment').insert({
+          tenant_id:    tenantId,
+          ticket_id:    ticket.id,
+          equipment_id: newEq.id,
+        })
+      }
+    }
+  }
 
   redirect(`/tickets/${ticket.id}`)
 }

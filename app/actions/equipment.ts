@@ -3,7 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantId } from '@/lib/supabase/get-tenant'
-import type { EquipmentCategory, EquipmentStatus } from '@/types'
+import type { EquipmentCategory, EquipmentStatus, VisitEquipmentAction } from '@/types'
+
+export interface QuickEquipmentData {
+  equipment_type: string
+  model: string
+  serial_number: string
+  notes: string
+}
 
 export interface EquipmentFormData {
   equipment_type: string
@@ -110,6 +117,84 @@ export async function updateEquipment(
   if (error) return { error: 'שגיאה בעדכון הציוד.' }
 
   revalidatePath(`/customers/${customerId}`)
+  return {}
+}
+
+export async function createEquipmentAndLinkToTicket(
+  customerId: string,
+  ticketId: string,
+  data: QuickEquipmentData
+): Promise<ActionResult> {
+  if (!data.equipment_type.trim()) return { errors: { equipment_type: 'סוג ציוד הוא שדה חובה' } }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { data: equipment, error: eqError } = await supabase
+    .from('equipment')
+    .insert({
+      tenant_id:      tenantId,
+      customer_id:    customerId,
+      equipment_type: data.equipment_type.trim(),
+      model:          data.model.trim() || null,
+      serial_number:  data.serial_number.trim() || null,
+      notes:          data.notes.trim() || null,
+      status:         'at_customer',
+    })
+    .select('id')
+    .single()
+
+  if (eqError || !equipment) return { error: 'שגיאה בהוספת הציוד.' }
+
+  const { error: linkError } = await supabase.from('ticket_equipment').insert({
+    tenant_id:    tenantId,
+    ticket_id:    ticketId,
+    equipment_id: equipment.id,
+  })
+
+  if (linkError) return { error: 'הציוד נוצר אך לא הצלחנו לקשר אותו לקריאה.' }
+
+  revalidatePath(`/tickets/${ticketId}`)
+  return {}
+}
+
+export async function createEquipmentAndLinkToVisit(
+  customerId: string,
+  visitId: string,
+  action: VisitEquipmentAction,
+  data: QuickEquipmentData
+): Promise<ActionResult> {
+  if (!data.equipment_type.trim()) return { errors: { equipment_type: 'סוג ציוד הוא שדה חובה' } }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { data: equipment, error: eqError } = await supabase
+    .from('equipment')
+    .insert({
+      tenant_id:      tenantId,
+      customer_id:    customerId,
+      equipment_type: data.equipment_type.trim(),
+      model:          data.model.trim() || null,
+      serial_number:  data.serial_number.trim() || null,
+      notes:          data.notes.trim() || null,
+      status:         'at_customer',
+    })
+    .select('id')
+    .single()
+
+  if (eqError || !equipment) return { error: 'שגיאה בהוספת הציוד.' }
+
+  const { error: linkError } = await supabase.from('visit_equipment').insert({
+    tenant_id:    tenantId,
+    visit_id:     visitId,
+    equipment_id: equipment.id,
+    action,
+  })
+
+  if (linkError) return { error: 'הציוד נוצר אך לא הצלחנו לקשר אותו לביקור.' }
+
+  revalidatePath(`/visits/${visitId}`)
   return {}
 }
 

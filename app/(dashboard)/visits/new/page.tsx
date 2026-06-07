@@ -83,6 +83,7 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
       ticketId,
       ticketTitle: `#${ticket.ticket_number} — ${ticket.title}`,
       customerName: customer?.business_name ?? customer?.name ?? '',
+      customerId:   customer?.id,
       billingModel: (customer?.billing_model as 'contract' | 'pay_per_visit' | null) ?? null,
       technicianHourlyRate: defaultTech?.hourly_rate ?? null,
     }

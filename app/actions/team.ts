@@ -103,10 +103,15 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
   const newUserId      = linkData.user.id
   const invitationLink = linkData.properties.action_link
 
-  // ── Create profile record (admin client — bypasses RLS) ──────────────
+  // ── Create/update profile record (admin client — bypasses RLS) ──────
   // Must use adminClient here: the new user's ID differs from the logged-in
   // admin, so the regular client is blocked by profiles RLS on INSERT.
-  const { error: profileError } = await adminClient.from('profiles').insert({
+  //
+  // Using upsert instead of insert: generateLink with type='invite' on an
+  // existing email returns the same user ID without error (allows resending
+  // invites). If the profile already exists from a previous invite, upsert
+  // updates it rather than failing with a duplicate key error.
+  const { error: profileError } = await adminClient.from('profiles').upsert({
     id:          newUserId,
     tenant_id:   tenantId,
     full_name:   data.full_name.trim(),
@@ -114,14 +119,11 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
     phone:       data.phone.trim() || null,
     hourly_rate: data.hourly_rate ? Number(data.hourly_rate) : null,
     is_active:   true,
-  })
+  }, { onConflict: 'id' })
 
   if (profileError) {
-    console.error('[inviteTechnician] profile insert failed:', profileError.message)
-    // Don't rollback if profile already exists (user was previously invited)
-    if (!profileError.message.includes('duplicate') && !profileError.message.includes('unique')) {
-      await adminClient.auth.admin.deleteUser(newUserId)
-    }
+    console.error('[inviteTechnician] profile upsert failed:', profileError.message)
+    await adminClient.auth.admin.deleteUser(newUserId)
     return { error: `שגיאה ביצירת הפרופיל: ${profileError.message}` }
   }
 

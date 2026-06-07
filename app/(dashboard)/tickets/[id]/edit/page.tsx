@@ -34,6 +34,23 @@ export default async function EditTicketPage({ params }: PageProps) {
 
   if (!ticket) notFound()
 
+  const customerId = (ticket.customer_id as string) ?? ''
+
+  const [{ data: linkedEquipment }, { data: customerEquipment }] = await Promise.all([
+    supabase
+      .from('ticket_equipment')
+      .select('id, equipment_id, equipment:equipment_id(id, equipment_type, manufacturer, model, serial_number, status)')
+      .eq('ticket_id', id),
+    customerId
+      ? supabase
+          .from('equipment')
+          .select('id, equipment_type, manufacturer, model, serial_number, status')
+          .eq('customer_id', customerId)
+          .eq('is_deleted', false)
+          .order('equipment_type')
+      : Promise.resolve({ data: [] }),
+  ])
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -56,6 +73,12 @@ export default async function EditTicketPage({ params }: PageProps) {
           customers={customers ?? []}
           technicians={technicians ?? []}
           ticket={ticket}
+          linkedEquipment={(linkedEquipment ?? []).map(le => ({
+            id:           le.id as string,
+            equipment_id: le.equipment_id as string,
+            equipment:    le.equipment as unknown as import('@/types').Equipment,
+          }))}
+          customerEquipment={(customerEquipment ?? []) as import('@/types').Equipment[]}
         />
       </div>
     </div>

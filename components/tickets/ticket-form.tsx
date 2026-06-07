@@ -13,19 +13,26 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, X, Monitor } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   TICKET_URGENCY_LABELS,
   TICKET_URGENCY_COLORS,
 } from '@/types'
-import type { Customer, Profile, TicketUrgency, TicketChannel } from '@/types'
+import type { Customer, Profile, TicketUrgency, TicketChannel, Equipment } from '@/types'
 import {
   createTicket,
   updateTicket,
+  getCustomerEquipment,
   type TicketFormData,
   type ActionResult,
 } from '@/app/actions/tickets'
+import type { QuickEquipmentData } from '@/app/actions/equipment'
+import { TicketEquipmentSelector } from '@/components/equipment/ticket-equipment-selector'
+import { QuickCreateCustomerDialog } from '@/components/customers/quick-create-customer-dialog'
+
+type EquipmentOption = { id: string; equipment_type: string; manufacturer: string | null; model: string | null; serial_number: string | null }
+const EMPTY_EQ = (): QuickEquipmentData => ({ equipment_type: '', model: '', serial_number: '', notes: '' })
 
 interface TicketFormProps {
   customers: Pick<Customer, 'id' | 'name' | 'business_name'>[]
@@ -42,6 +49,9 @@ interface TicketFormProps {
     assigned_technician_id: string | null
     internal_notes: string | null
   }
+  // Edit-mode equipment props (from /tickets/[id]/edit page)
+  linkedEquipment?: { id: string; equipment_id: string; equipment: Equipment }[]
+  customerEquipment?: Equipment[]
 }
 
 const CHANNEL_LABELS: Record<TicketChannel, string> = {
@@ -61,11 +71,17 @@ const CHANNEL_OPTIONS = (Object.entries(CHANNEL_LABELS) as [TicketChannel, strin
   ([value, label]) => ({ value, label })
 )
 
-export function TicketForm({ customers, technicians, defaultCustomerId, ticket }: TicketFormProps) {
+export function TicketForm({ customers, technicians, defaultCustomerId, ticket, linkedEquipment = [], customerEquipment = [] }: TicketFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
+  const [fetchedEquipment, setFetchedEquipment] = useState<EquipmentOption[]>([])
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false)
+  const [extraCustomers, setExtraCustomers] = useState<Pick<Customer, 'id' | 'name' | 'business_name'>[]>([])
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([])
+  const [newEquipmentItems, setNewEquipmentItems] = useState<QuickEquipmentData[]>([])
+  const [eqForm, setEqForm] = useState<QuickEquipmentData>(EMPTY_EQ())
 
   const [form, setForm] = useState<TicketFormData>({
     customer_id: ticket?.customer_id ?? defaultCustomerId ?? '',
@@ -80,25 +96,64 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket }
 
   function set(field: keyof TicketFormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
-    if (errors[field]) setErrors((prev) => { const e = { ...prev }; delete e[field]; return e })
+    if (errors[field as string]) setErrors((prev) => { const e = { ...prev }; delete e[field as string]; return e })
+  }
+
+  async function handleCustomerCreated(customer: { id: string; name: string; business_name: string | null }) {
+    setExtraCustomers(prev => [customer, ...prev])
+    await onCustomerChange(customer.id)
+  }
+
+  async function onCustomerChange(customerId: string) {
+    set('customer_id', customerId)
+    setSelectedEquipmentIds([])
+    setNewEquipmentItems([])
+    if (customerId) {
+      const eq = await getCustomerEquipment(customerId)
+      setFetchedEquipment(eq)
+    } else {
+      setFetchedEquipment([])
+    }
+  }
+
+  function toggleEquipment(id: string) {
+    setSelectedEquipmentIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  function addNewEquipment() {
+    if (!eqForm.equipment_type.trim()) return
+    setNewEquipmentItems(prev => [...prev, { ...eqForm }])
+    setEqForm(EMPTY_EQ())
+  }
+
+  function removeNewEquipment(index: number) {
+    setNewEquipmentItems(prev => prev.filter((_, i) => i !== index))
   }
 
   function handleSubmit() {
     setErrors({})
     setGlobalError('')
     startTransition(async () => {
+      const submitData: TicketFormData = {
+        ...form,
+        equipment_ids: selectedEquipmentIds.length > 0 ? selectedEquipmentIds : undefined,
+        new_equipment: newEquipmentItems.length > 0 ? newEquipmentItems : undefined,
+      }
       let result: ActionResult
       if (ticket) {
-        result = await updateTicket(ticket.id, form)
+        result = await updateTicket(ticket.id, submitData)
       } else {
-        result = await createTicket(form)
+        result = await createTicket(submitData)
       }
       if (result?.errors) setErrors(result.errors)
       if (result?.error) setGlobalError(result.error)
     })
   }
 
-  const selectedCustomer = customers.find((c) => c.id === form.customer_id)
+  const allCustomers = [...extraCustomers, ...customers]
+  const selectedCustomer = allCustomers.find((c) => c.id === form.customer_id)
   const selectedTechnician = technicians.find((t) => t.id === form.assigned_technician_id)
   const selectedUrgency = TICKET_URGENCY_LABELS[form.urgency as TicketUrgency]
   const selectedChannel = form.open_channel ? CHANNEL_LABELS[form.open_channel as TicketChannel] : null
@@ -119,7 +174,10 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket }
           {/* Customer */}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>לקוח *</Label>
-            <Select value={form.customer_id} onValueChange={(v) => set('customer_id', v ?? '')}>
+            <Select
+              value={form.customer_id || ''}
+              onValueChange={(v) => onCustomerChange(v ?? '')}
+            >
               <SelectTrigger className={cn('w-full', errors.customer_id && 'border-destructive')}>
                 <span className={cn('flex-1 text-sm truncate', !form.customer_id && 'text-muted-foreground')}>
                   {selectedCustomer
@@ -130,11 +188,29 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket }
                 </span>
               </SelectTrigger>
               <SelectContent>
-                {customers.map((c) => (
+                {allCustomers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.business_name ? `${c.name} — ${c.business_name}` : c.name}
                   </SelectItem>
                 ))}
+                {/*
+                  Wrapper div absorbs pointer events so Base UI's outside-click
+                  detector never fires. The button then gets the click safely.
+                */}
+                <div
+                  className="p-1 border-t border-border mt-1"
+                  onPointerDown={e => { e.preventDefault(); e.stopPropagation() }}
+                >
+                  <button
+                    type="button"
+                    onPointerDown={e => { e.preventDefault(); e.stopPropagation() }}
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setCreateCustomerOpen(true) }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    לקוח חדש 
+                  </button>
+                </div>
               </SelectContent>
             </Select>
             {errors.customer_id && <p className="text-xs text-destructive">{errors.customer_id}</p>}
@@ -261,6 +337,138 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket }
         </div>
       </section>
 
+      {/* Equipment — edit mode: full TicketEquipmentSelector */}
+      {ticket && form.customer_id && (
+        <>
+          <Separator />
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Monitor className="h-4 w-4" />
+              ציוד מקושר לקריאה
+            </h3>
+            <TicketEquipmentSelector
+              ticketId={ticket.id}
+              customerId={form.customer_id}
+              customerEquipment={customerEquipment}
+              linkedEquipment={linkedEquipment}
+            />
+          </section>
+        </>
+      )}
+
+      {/* Equipment — create mode: inline selection */}
+      {!ticket && form.customer_id && (
+        <>
+          <Separator />
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Monitor className="h-4 w-4" />
+              ציוד מקושר לקריאה
+            </h3>
+
+            {/* Select from existing */}
+            {fetchedEquipment.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">בחר מציוד קיים של הלקוח:</p>
+                <div className="grid gap-1.5">
+                  {fetchedEquipment.map(eq => {
+                    const selected = selectedEquipmentIds.includes(eq.id)
+                    return (
+                      <button
+                        key={eq.id}
+                        type="button"
+                        onClick={() => toggleEquipment(eq.id)}
+                        className={cn(
+                          'flex items-center gap-3 p-2.5 rounded-lg border text-start text-sm transition-colors w-full',
+                          selected
+                            ? 'border-primary/50 bg-primary/5'
+                            : 'border-border hover:border-primary/30 hover:bg-muted/40'
+                        )}
+                      >
+                        <div className={cn(
+                          'h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center',
+                          selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'
+                        )}>
+                          {selected && <span className="text-primary-foreground text-[10px] font-bold">✓</span>}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-medium truncate">{eq.equipment_type}</span>
+                          <span className="text-muted-foreground">
+                            {[eq.manufacturer, eq.model].filter(Boolean).join(' · ')}
+                          </span>
+                          {eq.serial_number && (
+                            <span className="text-muted-foreground" dir="ltr"> · {eq.serial_number}</span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Add new equipment on the fly */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">הוסף ציוד חדש:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Input
+                  value={eqForm.equipment_type}
+                  onChange={e => setEqForm(f => ({ ...f, equipment_type: e.target.value }))}
+                  placeholder="סוג ציוד *"
+                />
+                <Input
+                  value={eqForm.model}
+                  onChange={e => setEqForm(f => ({ ...f, model: e.target.value }))}
+                  placeholder="דגם"
+                />
+                <div className="flex gap-2">
+                  <Input
+                    dir="ltr"
+                    value={eqForm.serial_number}
+                    onChange={e => setEqForm(f => ({ ...f, serial_number: e.target.value }))}
+                    placeholder="מס׳ סידורי"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addNewEquipment}
+                    disabled={!eqForm.equipment_type.trim()}
+                    className="gap-1 shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    הוסף
+                  </Button>
+                </div>
+              </div>
+              {newEquipmentItems.length > 0 && (
+                <div className="grid gap-1.5 mt-2">
+                  {newEquipmentItems.map((eq, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border border-border text-sm">
+                      <div className="min-w-0">
+                        <span className="font-medium">{eq.equipment_type}</span>
+                        {eq.model && <span className="text-muted-foreground"> · {eq.model}</span>}
+                        {eq.serial_number && <span className="text-muted-foreground" dir="ltr"> · {eq.serial_number}</span>}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removeNewEquipment(i)}
+                        className="text-muted-foreground hover:text-destructive shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
       {/* Actions */}
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
         <Button variant="outline" onClick={() => router.back()} disabled={isPending}>
@@ -271,6 +479,12 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket }
           {ticket ? 'שמור שינויים' : 'פתח קריאה'}
         </Button>
       </div>
+
+      <QuickCreateCustomerDialog
+        open={createCustomerOpen}
+        onOpenChange={setCreateCustomerOpen}
+        onCreated={handleCustomerCreated}
+      />
     </div>
   )
 }

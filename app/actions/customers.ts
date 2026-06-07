@@ -80,6 +80,61 @@ export async function createCustomer(data: CustomerFormData): Promise<ActionResu
   redirect(`/customers/${customer.id}`)
 }
 
+export interface QuickCustomerResult {
+  customerId?: string
+  name?: string
+  business_name?: string | null
+  error?: string
+  errors?: Record<string, string>
+}
+
+export async function createCustomerQuick(data: {
+  name: string
+  business_name: string
+  phone: string
+  email: string
+  address: string
+  city: string
+  floor: string
+  internal_notes: string
+}): Promise<QuickCustomerResult> {
+  const errors: Record<string, string> = {}
+  if (!data.name || data.name.trim().length < 2) errors.name = 'שם חייב להכיל לפחות 2 תווים'
+  if (data.phone && !/^0[2-9]\d{7,8}$/.test(data.phone.replace(/[-\s]/g, ''))) errors.phone = 'מספר טלפון לא תקין'
+  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'כתובת אימייל לא תקינה'
+  if (Object.keys(errors).length > 0) return { errors }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .insert({
+      tenant_id:       tenantId,
+      name:            data.name.trim(),
+      business_name:   data.business_name.trim() || null,
+      phone:           data.phone.trim() || null,
+      email:           data.email.trim() || null,
+      address:         data.address.trim() || null,
+      city:            data.city.trim() || null,
+      floor:           data.floor.trim() || null,
+      internal_notes:  data.internal_notes.trim() || null,
+      billing_model:   'pay_per_visit',
+      customer_status: 'occasional',
+    })
+    .select('id, name, business_name')
+    .single()
+
+  if (error || !customer) return { error: 'שגיאה ביצירת הלקוח.' }
+
+  revalidatePath('/customers')
+  return {
+    customerId:    customer.id as string,
+    name:          customer.name as string,
+    business_name: customer.business_name as string | null,
+  }
+}
+
 export async function updateCustomer(id: string, data: CustomerFormData): Promise<ActionResult> {
   const errors = validateCustomer(data)
   if (Object.keys(errors).length > 0) return { errors }
