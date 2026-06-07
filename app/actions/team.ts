@@ -76,7 +76,15 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
 
   const adminClient = createAdminClient()
   const email       = data.email.trim().toLowerCase()
-  const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+  // Resolve the public app URL in priority order:
+  //   1. NEXT_PUBLIC_APP_URL  — set explicitly (recommended for all environments)
+  //   2. VERCEL_URL           — automatically injected by Vercel on every deployment
+  //   3. localhost fallback   — local dev only; invitation links from localhost will
+  //                             NOT work for real technicians on other devices.
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
   // ── generateLink: creates auth user + returns invite URL, NO email sent ──
   //

@@ -152,7 +152,11 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket, 
     })
   }
 
-  const allCustomers = [...extraCustomers, ...customers]
+  const extraIds = new Set(extraCustomers.map(c => c.id))
+  const allCustomers = [
+    ...extraCustomers,
+    ...customers.filter(c => !extraIds.has(c.id)),
+  ]
   const selectedCustomer = allCustomers.find((c) => c.id === form.customer_id)
   const selectedTechnician = technicians.find((t) => t.id === form.assigned_technician_id)
   const selectedUrgency = TICKET_URGENCY_LABELS[form.urgency as TicketUrgency]

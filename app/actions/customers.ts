@@ -88,6 +88,32 @@ export interface QuickCustomerResult {
   errors?: Record<string, string>
 }
 
+export async function updateCustomerBilling(
+  customerId: string,
+  data: { name: string; business_name: string; vat_id: string }
+): Promise<ActionResult> {
+  if (!data.name || data.name.trim().length < 2) {
+    return { errors: { name: 'שם חייב להכיל לפחות 2 תווים' } }
+  }
+
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('customers')
+    .update({
+      name:          data.name.trim(),
+      business_name: data.business_name.trim() || null,
+      vat_id:        data.vat_id.trim() || null,
+    })
+    .eq('id', customerId)
+
+  if (error) return { error: 'שגיאה בעדכון פרטי הלקוח.' }
+
+  revalidatePath('/visits')
+  revalidatePath('/customers')
+  return {}
+}
+
 export async function createCustomerQuick(data: {
   name: string
   business_name: string

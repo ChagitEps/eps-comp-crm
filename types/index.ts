@@ -177,6 +177,7 @@ export interface Customer {
   billing_model: BillingModel | null
   billing_terms: string | null
   internal_notes: string | null
+  vat_id: string | null
   is_deleted: boolean
   created_at: string
   updated_at: string

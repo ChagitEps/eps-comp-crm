@@ -6,7 +6,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { GoogleSyncButton } from '@/components/visits/google-sync-button'
 import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
-import { GenerateInvoiceButton } from '@/components/visits/generate-invoice-button'
+import { PreInvoiceVerification } from '@/components/visits/pre-invoice-verification'
 import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
 import { VisitTimer } from '@/components/visits/visit-timer'
 import { VisitOutcome } from '@/components/visits/visit-outcome'
@@ -91,6 +91,15 @@ export default async function VisitDetailPage({ params }: PageProps) {
           .order('equipment_type')
       : Promise.resolve({ data: [] }),
   ])
+
+  // Fetch customer vat_id for pre-invoice verification
+  const { data: customerBilling } = customer?.id
+    ? await supabase
+        .from('customers')
+        .select('vat_id')
+        .eq('id', customer.id)
+        .single()
+    : { data: null }
 
   const previousVisits: PreviousVisitRow[] = (otherVisitsRaw ?? []).map(v => ({
     id:               v.id as string,
@@ -328,14 +337,18 @@ export default async function VisitDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Generate invoice — admin only, visit completed, has amount */}
-        {userRole === 'admin' && Number(visit.total_cost) > 0 && visit.status === 'completed' && (
+        {/* Pre-invoice verification + generate — admin only, visit completed, has amount */}
+        {userRole === 'admin' && Number(visit.total_cost) > 0 && visit.status === 'completed' && customer?.id && (
           <div className="pt-3 border-t border-border">
-            <GenerateInvoiceButton
+            <PreInvoiceVerification
               visitId={id}
               currentBillingStatus={visit.billing_status ?? 'pending'}
               existingInvoiceId={visit.icount_invoice_id ?? null}
               existingInvoiceUrl={visit.icount_invoice_url ?? null}
+              customerId={customer.id}
+              customerName={customer.name}
+              customerBusinessName={customer.business_name}
+              customerVatId={(customerBilling as { vat_id: string | null } | null)?.vat_id ?? null}
             />
           </div>
         )}

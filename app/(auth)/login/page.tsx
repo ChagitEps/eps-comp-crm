@@ -74,8 +74,9 @@ function LoginForm() {
     setGoogleLoading(true)
 
     const supabase   = createClient()
-    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
-    const redirectTo = `${appUrl}/auth/callback`
+    // Always use the actual running origin so the redirect URL matches
+    // exactly what the browser is on — avoids port-mismatch failures in dev
+    const redirectTo = `${window.location.origin}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
