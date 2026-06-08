@@ -409,10 +409,19 @@ export async function createTicket(data: TicketFormData): Promise<ActionResult> 
   }
 
   // ── Create new equipment + link ───────────────────────────────────────
-  if (data.new_equipment?.length) {
+  //
+  // Uses adminClient (service role) for both INSERTs so that:
+  //   a) RLS SELECT vs INSERT policy mismatches can't cause silent null returns
+  //   b) the row is always committed even when the session role has limited access
+  //
+  if (data.new_equipment?.length && data.customer_id) {
+    const adminClient = createAdminClient()
+
     for (const eq of data.new_equipment) {
       if (!eq.equipment_type.trim()) continue
-      const { data: newEq } = await supabase
+
+      // 1. Create the equipment record permanently under the customer
+      const { data: newEq, error: eqError } = await adminClient
         .from('equipment')
         .insert({
           tenant_id:      tenantId,
@@ -425,14 +434,28 @@ export async function createTicket(data: TicketFormData): Promise<ActionResult> 
         })
         .select('id')
         .single()
-      if (newEq) {
-        await supabase.from('ticket_equipment').insert({
+
+      if (eqError || !newEq) {
+        console.error('[createTicket] equipment insert failed:', eqError?.message)
+        continue  // skip link but don't abort the whole ticket
+      }
+
+      // 2. Link the new equipment to this ticket
+      const { error: linkError } = await adminClient
+        .from('ticket_equipment')
+        .insert({
           tenant_id:    tenantId,
           ticket_id:    ticket.id,
           equipment_id: newEq.id,
         })
+
+      if (linkError) {
+        console.error('[createTicket] ticket_equipment link failed:', linkError?.message)
       }
     }
+
+    // Invalidate the customer's equipment cache so the next load reflects the new items
+    revalidatePath(`/customers/${data.customer_id}`)
   }
 
   redirect(`/tickets/${ticket.id}`)
