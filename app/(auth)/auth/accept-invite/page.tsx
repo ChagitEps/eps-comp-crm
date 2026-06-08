@@ -10,35 +10,89 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, Monitor, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 
 export default function AcceptInvitePage() {
-  const router = useRouter()
+  const router  = useRouter()
   const supabase = createClient()
 
-  const [userEmail,    setUserEmail]    = useState<string | null>(null)
-  const [isExisting,   setIsExisting]   = useState(false)   // true = already-logged-in user
-  const [password,     setPassword]     = useState('')
-  const [confirm,      setConfirm]      = useState('')
-  const [showPass,     setShowPass]     = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [loading,      setLoading]      = useState(false)
-  const [done,         setDone]         = useState(false)
-  const [checking,     setChecking]     = useState(true)
+  const [userEmail,  setUserEmail]  = useState<string | null>(null)
+  const [isExisting, setIsExisting] = useState(false)
+  const [password,   setPassword]   = useState('')
+  const [confirm,    setConfirm]    = useState('')
+  const [showPass,   setShowPass]   = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+  const [loading,    setLoading]    = useState(false)
+  const [done,       setDone]       = useState(false)
+  const [checking,   setChecking]   = useState(true)
 
-  // ── Verify the invite session ─────────────────────────────────────
+  // ── Detect invite session via onAuthStateChange ────────────────────────
+  //
+  // WHY: Supabase returns invite tokens in the URL hash fragment:
+  //   /auth/accept-invite#access_token=xxx&refresh_token=yyy&type=invite
+  //
+  // getSession() resolves BEFORE createBrowserClient finishes parsing the hash,
+  // so it always returns null on first load → the page incorrectly showed
+  // "expired link" for every valid invite.
+  //
+  // onAuthStateChange fires AFTER the client has processed the hash tokens and
+  // established the session, making it the only reliable way to detect an invite.
+  //
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUserEmail(session.user.email ?? null)
-        // Detect if this is a pre-existing session (not a fresh invite token).
-        // Invite sessions have amr containing 'link' or last_sign_in very recent.
-        const isInvite = session.user.app_metadata?.provider === 'email' &&
-          !session.user.confirmed_at   // unconfirmed = freshly invited
-        setIsExisting(!isInvite && !!session.user.confirmed_at)
-      }
-      setChecking(false)
-    })
-  }, [])
+    let settled = false
 
-  // ── Submit new password ──────────────────────────────────────────────
+    function applySession(session: { user: { email?: string | null; confirmed_at?: string | null } } | null) {
+      if (!session?.user) return false
+      setUserEmail(session.user.email ?? null)
+      // Invited users have not yet confirmed their email → confirmed_at is null
+      const isInvite = !session.user.confirmed_at
+      setIsExisting(!isInvite && !!session.user.confirmed_at)
+      return true
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (settled) return
+
+      if (event === 'INITIAL_SESSION') {
+        if (applySession(session)) {
+          // Pre-existing or hash-resolved session arrived immediately
+          settled = true
+          setChecking(false)
+          return
+        }
+        // No session yet — if the URL has a hash token, wait for SIGNED_IN.
+        // If there is no hash at all, the link is definitely expired.
+        const hasHashToken =
+          typeof window !== 'undefined' &&
+          window.location.hash.includes('access_token')
+        if (!hasHashToken) {
+          settled = true
+          setChecking(false)
+        }
+        return
+      }
+
+      if (event === 'SIGNED_IN') {
+        // Fires once the hash tokens have been exchanged for a real session
+        applySession(session)
+        settled = true
+        setChecking(false)
+      }
+    })
+
+    // Safety net: if Supabase never fires a conclusive event (e.g. malformed hash),
+    // stop the spinner after 6 s and show the expired-link screen.
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        setChecking(false)
+      }
+    }, 6000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Submit new password ────────────────────────────────────────────────
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -62,30 +116,27 @@ export default function AcceptInvitePage() {
     }
 
     setDone(true)
-    // Redirect to dashboard after short delay
     setTimeout(() => router.push('/'), 1800)
   }
 
-  // ── Loading state ─────────────────────────────────────────────────
+  // ── Loading / checking ─────────────────────────────────────────────────
   if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <p className="text-sm">בודק קישור הזמנה...</p>
+        </div>
       </div>
     )
   }
 
-  // ── No active session — invite link expired / already used ────────
+  // ── No session — link expired or already used ──────────────────────────
   if (!userEmail) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
         <div className="w-full max-w-sm text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Monitor className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold">EPS COMP</span>
-          </div>
+          <Logo />
           <Card>
             <CardContent className="pt-6 space-y-3">
               <p className="text-sm font-medium">קישור ההזמנה פג תוקף או שכבר נוצל</p>
@@ -103,7 +154,7 @@ export default function AcceptInvitePage() {
     )
   }
 
-  // ── Success state ─────────────────────────────────────────────────
+  // ── Success ────────────────────────────────────────────────────────────
   if (done) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
@@ -121,23 +172,16 @@ export default function AcceptInvitePage() {
     )
   }
 
-  // ── Already-logged-in user warning ───────────────────────────────
+  // ── Already-logged-in warning ──────────────────────────────────────────
   if (isExisting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
         <div className="w-full max-w-sm space-y-4">
-          <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-                <Monitor className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-2xl font-bold">EPS COMP</span>
-            </div>
-          </div>
+          <Logo />
           <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-5 space-y-3">
             <p className="text-sm font-semibold text-amber-800">⚠️ קישור ההזמנה נפתח בדפדפן שבו אתה כבר מחובר</p>
             <p className="text-xs text-amber-700">
-              הקישור שנשלח לטכנאי חייב להיפתח בדפדפן נקי (Incognito / פרטי) שבו אין חשבון מחובר.
+              הקישור שנשלח לטכנאי חייב להיפתח בדפדפן נקי (Incognito / פרטי).
             </p>
             <div className="space-y-1.5 text-xs text-amber-800">
               <p className="font-medium">הוראות לטכנאי החדש:</p>
@@ -151,7 +195,7 @@ export default function AcceptInvitePage() {
               onClick={() => setIsExisting(false)}
               className="text-xs text-amber-600 underline hover:text-amber-800"
             >
-              אני מבין, המשך בכל זאת (הסיסמה תוגדר לחשבון הנוכחי: {userEmail})
+              המשך בכל זאת ({userEmail})
             </button>
           </div>
           <button onClick={() => router.push('/')} className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
@@ -162,21 +206,12 @@ export default function AcceptInvitePage() {
     )
   }
 
-  // ── Password setup form ───────────────────────────────────────────
+  // ── Password setup form ────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-sm space-y-6">
 
-        {/* Logo */}
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Monitor className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold">EPS COMP</span>
-          </div>
-          <p className="text-sm text-muted-foreground">מערכת ניהול שירות</p>
-        </div>
+        <Logo subtitle="הגדרת סיסמה" />
 
         <Card>
           <CardHeader className="space-y-1 pb-4">
@@ -194,6 +229,7 @@ export default function AcceptInvitePage() {
           <CardContent>
             <form onSubmit={handleSetPassword} className="space-y-4">
 
+              {/* New password */}
               <div className="space-y-2">
                 <Label htmlFor="password">סיסמה חדשה</Label>
                 <div className="relative">
@@ -207,6 +243,7 @@ export default function AcceptInvitePage() {
                     autoComplete="new-password"
                     dir="ltr"
                     className="pl-10"
+                    autoFocus
                   />
                   <button
                     type="button"
@@ -217,8 +254,12 @@ export default function AcceptInvitePage() {
                     {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                {password.length > 0 && password.length < 8 && (
+                  <p className="text-xs text-amber-600">עוד {8 - password.length} תווים נדרשים</p>
+                )}
               </div>
 
+              {/* Confirm password */}
               <div className="space-y-2">
                 <Label htmlFor="confirm">אימות סיסמה</Label>
                 <Input
@@ -233,6 +274,11 @@ export default function AcceptInvitePage() {
                 />
                 {confirm && password !== confirm && (
                   <p className="text-xs text-destructive">הסיסמאות אינן תואמות</p>
+                )}
+                {confirm && password === confirm && confirm.length >= 8 && (
+                  <p className="text-xs text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> הסיסמאות תואמות
+                  </p>
                 )}
               </div>
 
@@ -267,6 +313,21 @@ export default function AcceptInvitePage() {
           </button>
         </p>
       </div>
+    </div>
+  )
+}
+
+// ── Shared logo component ──────────────────────────────────────────────────
+function Logo({ subtitle }: { subtitle?: string }) {
+  return (
+    <div className="text-center space-y-1">
+      <div className="flex items-center justify-center gap-2">
+        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+          <Monitor className="w-5 h-5 text-primary-foreground" />
+        </div>
+        <span className="text-2xl font-bold">EPS COMP</span>
+      </div>
+      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
     </div>
   )
 }
