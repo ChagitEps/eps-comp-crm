@@ -5,6 +5,24 @@ import { NextResponse, type NextRequest } from 'next/server'
 const ACCOUNTANT_ALLOWED_PREFIXES = ['/finance', '/api/billing', '/api/auth', '/auth']
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // ── Auth-flow routes: bypass middleware completely ────────────────────
+  //
+  // These routes handle their own session/token logic client-side.
+  // CRITICAL: we must return BEFORE creating the Supabase server client or
+  // calling getUser(). In @supabase/ssr, getUser() automatically exchanges
+  // any PKCE ?code= parameter it finds in the URL. If we let it run for
+  // /auth/accept-invite?code=xxx, the code is consumed here and the client
+  // page receives an "Invalid Refresh Token" error because the token was
+  // already spent before the browser could exchange it.
+  //
+  const authFlowRoutes = ['/auth/accept-invite', '/auth/callback']
+  if (authFlowRoutes.some(r => pathname === r || pathname.startsWith(r + '?'))) {
+    return NextResponse.next({ request })
+  }
+
+  // ── All other routes: refresh session and enforce access control ──────
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -32,24 +50,13 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl
-
   // Public routes — no auth required
   const publicRoutes = ['/login']
-  // Auth flow routes — bypass redirect logic entirely
-  const allowAuthenticatedRoutes = [
-    '/auth/accept-invite',   // new user sets their password
-    '/auth/callback',        // OAuth code exchange (Google login)
-  ]
 
   if (publicRoutes.includes(pathname)) {
     if (user) {
       return NextResponse.redirect(new URL('/', request.url))
     }
-    return supabaseResponse
-  }
-
-  if (allowAuthenticatedRoutes.some(r => pathname.startsWith(r))) {
     return supabaseResponse
   }
 
