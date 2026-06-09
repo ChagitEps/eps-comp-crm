@@ -61,20 +61,20 @@ export function PreInvoiceVerification({
   }
 
   function handleSave() {
-    if (!draftName.trim() || draftName.trim().length < 2) {
-      setNameError('שם חייב להכיל לפחות 2 תווים')
+    if (!draftBusinessName.trim() || draftBusinessName.trim().length < 2) {
+      setNameError('שם חברה חייב להכיל לפחות 2 תווים')
       return
     }
     setNameError('')
     setSaveError('')
     startTransition(async () => {
       const result = await updateCustomerBilling(customerId, {
-        name:          draftName,
         business_name: draftBusinessName,
+        name:          draftName,
         vat_id:        draftVatId,
       })
-      if (result.error || result.errors?.name) {
-        setSaveError(result.error ?? result.errors?.name ?? 'שגיאה בשמירה')
+      if (result.error || result.errors?.business_name) {
+        setSaveError(result.error ?? result.errors?.business_name ?? 'שגיאה בשמירה')
         return
       }
       // Optimistically update local display
@@ -116,22 +116,22 @@ export function PreInvoiceVerification({
           /* ── Edit mode ── */
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">שם לקוח *</Label>
+              <Label className="text-xs">שם חברה *</Label>
               <Input
-                value={draftName}
-                onChange={e => { setDraftName(e.target.value); setNameError('') }}
-                placeholder="שם מלא"
+                value={draftBusinessName}
+                onChange={e => { setDraftBusinessName(e.target.value); setNameError('') }}
+                placeholder="שם החברה כפי שיופיע בחשבונית"
                 className={nameError ? 'border-destructive' : ''}
               />
               {nameError && <p className="text-xs text-destructive">{nameError}</p>}
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">שם עסק / ח.פ שם</Label>
+              <Label className="text-xs">איש קשר</Label>
               <Input
-                value={draftBusinessName}
-                onChange={e => setDraftBusinessName(e.target.value)}
-                placeholder="שם החברה כפי שיופיע בחשבונית"
+                value={draftName}
+                onChange={e => setDraftName(e.target.value)}
+                placeholder="שם האיש קשר בחברה"
               />
             </div>
 

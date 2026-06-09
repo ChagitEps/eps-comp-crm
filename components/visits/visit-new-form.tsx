@@ -100,7 +100,7 @@ export function VisitNewForm({
               <SelectContent>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.business_name ? `${c.name} — ${c.business_name}` : c.name}
+                    {`${c.business_name}${c.name ? ` — ${c.name}` : ''}`}
                   </SelectItem>
                 ))}
               </SelectContent>

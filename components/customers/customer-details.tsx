@@ -24,10 +24,12 @@ interface CustomerDetailsProps {
 }
 
 export function CustomerDetails({ customer }: CustomerDetailsProps) {
+  const c = customer as typeof customer & { vat_id?: string | null }
   return (
     <dl className="divide-y divide-border">
-      <DetailRow label="שם מלא" value={customer.name} />
-      <DetailRow label="שם עסק" value={customer.business_name} />
+      <DetailRow label="שם חברה" value={customer.business_name} />
+      <DetailRow label="איש קשר" value={customer.name} />
+      <DetailRow label="ח.פ / ת.ז" value={c.vat_id} dir="ltr" />
       <DetailRow label="טלפון" value={customer.phone} dir="ltr" />
       <DetailRow label="אימייל" value={customer.email} dir="ltr" />
       <DetailRow label="כתובת" value={customer.address} />

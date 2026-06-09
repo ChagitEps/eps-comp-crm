@@ -17,8 +17,8 @@ import { createCustomerQuick } from '@/app/actions/customers'
 
 interface CreatedCustomer {
   id: string
-  name: string
-  business_name: string | null
+  name: string | null
+  business_name: string
 }
 
 interface QuickCreateCustomerDialogProps {
@@ -68,8 +68,8 @@ export function QuickCreateCustomerDialog({
       if (result.error)  { setGlobalError(result.error); return }
       onCreated({
         id:            result.customerId!,
-        name:          result.name!,
-        business_name: result.business_name ?? null,
+        business_name: result.business_name!,
+        name:          result.name ?? null,
       })
       handleClose()
     })
@@ -94,24 +94,26 @@ export function QuickCreateCustomerDialog({
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">פרטים בסיסיים</h4>
 
             <div className="space-y-1.5">
-              <Label>שם מלא *</Label>
-              <Input
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
-                placeholder="ישראל ישראלי"
-                className={fieldErrors.name ? 'border-destructive' : ''}
-                autoFocus
-              />
-              {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>שם עסק / ח.פ</Label>
+              <Label>שם חברה *</Label>
               <Input
                 value={form.business_name}
                 onChange={e => set('business_name', e.target.value)}
                 placeholder="חברת ABC בע״מ"
+                className={fieldErrors.business_name ? 'border-destructive' : ''}
+                autoFocus
               />
+              {fieldErrors.business_name && <p className="text-xs text-destructive">{fieldErrors.business_name}</p>}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>איש קשר</Label>
+              <Input
+                value={form.name}
+                onChange={e => set('name', e.target.value)}
+                placeholder="שם האיש קשר בחברה"
+                className={fieldErrors.name ? 'border-destructive' : ''}
+              />
+              {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
             </div>
           </section>
 

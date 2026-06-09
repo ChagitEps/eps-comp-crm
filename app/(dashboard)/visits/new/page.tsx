@@ -149,7 +149,7 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
 
   // ── Case B: no ticket ─────────────────────────────────────────────────
   const [{ data: customers }, { data: openTickets }, { data: technicians }] = await Promise.all([
-    supabase.from('customers').select('id, name, business_name, billing_model').eq('is_deleted', false).order('name'),
+    supabase.from('customers').select('id, name, business_name, billing_model').eq('is_deleted', false).order('business_name'),
     supabase.from('tickets').select('id, ticket_number, title, customer_id, assigned_technician_id')
       .eq('is_deleted', false).not('status', 'in', '("completed","cancelled")').order('created_at', { ascending: false }),
     supabase.from('profiles').select('id, full_name, hourly_rate')

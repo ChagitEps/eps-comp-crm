@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Building2, Phone, Mail, MapPin, Edit, Trash2 } from 'lucide-react'
+import { User, Phone, Mail, MapPin, Edit, Trash2 } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -36,11 +36,13 @@ export function CustomerCardHeader({ customer }: CustomerCardHeaderProps) {
       {/* Top row: name + actions */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold truncate">{customer.name}</h1>
-          {customer.business_name && (
+          <h1 className="text-xl font-bold truncate">
+            {customer.business_name || customer.name}
+          </h1>
+          {customer.business_name && customer.name && (
             <p className="text-muted-foreground text-sm mt-0.5 flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 shrink-0" />
-              {customer.business_name}
+              <User className="h-3.5 w-3.5 shrink-0" />
+              {customer.name}
             </p>
           )}
         </div>
@@ -67,7 +69,7 @@ export function CustomerCardHeader({ customer }: CustomerCardHeaderProps) {
               </button>
             }
             title="מחיקת לקוח"
-            description={`האם למחוק את ${customer.name}? פעולה זו ניתנת לביטול על ידי מנהל.`}
+            description={`האם למחוק את ${customer.business_name || customer.name}? פעולה זו ניתנת לביטול על ידי מנהל.`}
             confirmLabel="מחק"
             onConfirm={handleDelete}
           />

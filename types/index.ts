@@ -163,8 +163,8 @@ export interface Profile {
 export interface Customer {
   id: string
   tenant_id: string
-  name: string
-  business_name: string | null
+  name: string | null
+  business_name: string
   customer_type: CustomerType | null
   customer_status: CustomerStatus | null
   phone: string | null

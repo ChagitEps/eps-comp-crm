@@ -99,7 +99,7 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket, 
     if (errors[field as string]) setErrors((prev) => { const e = { ...prev }; delete e[field as string]; return e })
   }
 
-  async function handleCustomerCreated(customer: { id: string; name: string; business_name: string | null }) {
+  async function handleCustomerCreated(customer: { id: string; name: string | null; business_name: string }) {
     setExtraCustomers(prev => [customer, ...prev])
     await onCustomerChange(customer.id)
   }
@@ -185,16 +185,14 @@ export function TicketForm({ customers, technicians, defaultCustomerId, ticket, 
               <SelectTrigger className={cn('w-full', errors.customer_id && 'border-destructive')}>
                 <span className={cn('flex-1 text-sm truncate', !form.customer_id && 'text-muted-foreground')}>
                   {selectedCustomer
-                    ? selectedCustomer.business_name
-                      ? `${selectedCustomer.name} — ${selectedCustomer.business_name}`
-                      : selectedCustomer.name
+                    ? `${selectedCustomer.business_name}${selectedCustomer.name ? ` — ${selectedCustomer.name}` : ''}`
                     : 'בחר לקוח...'}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 {allCustomers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.business_name ? `${c.name} — ${c.business_name}` : c.name}
+                    {`${c.business_name}${c.name ? ` — ${c.name}` : ''}`}
                   </SelectItem>
                 ))}
                 {/*

@@ -7,8 +7,9 @@ import { getTenantId } from '@/lib/supabase/get-tenant'
 import type { CustomerType, CustomerStatus, BillingModel } from '@/types'
 
 export interface CustomerFormData {
-  name: string
-  business_name: string
+  business_name: string   // שם חברה — primary (required in B2B)
+  name: string            // איש קשר — contact person (optional)
+  vat_id: string          // ח.פ / ת.ז
   customer_type: CustomerType | ''
   customer_status: CustomerStatus | ''
   billing_model: BillingModel | ''
@@ -26,8 +27,9 @@ export interface CustomerFormData {
 function validateCustomer(data: CustomerFormData): Record<string, string> {
   const errors: Record<string, string> = {}
 
-  if (!data.name || data.name.trim().length < 2) {
-    errors.name = 'שם חייב להכיל לפחות 2 תווים'
+  // business_name is now the primary required field (company name)
+  if (!data.business_name || data.business_name.trim().length < 2) {
+    errors.business_name = 'שם חברה חייב להכיל לפחות 2 תווים'
   }
 
   if (data.phone && !/^0[2-9]\d{7,8}$/.test(data.phone.replace(/[-\s]/g, ''))) {
@@ -56,20 +58,21 @@ export async function createCustomer(data: CustomerFormData): Promise<ActionResu
   const { data: customer, error } = await supabase
     .from('customers')
     .insert({
-      tenant_id: tenantId,
-      name: data.name.trim(),
-      business_name: data.business_name.trim() || null,
-      customer_type: data.customer_type || null,
+      tenant_id:      tenantId,
+      business_name:  data.business_name.trim(),
+      name:           data.name.trim() || null,
+      vat_id:         data.vat_id.trim() || null,
+      customer_type:  data.customer_type || null,
       customer_status: data.customer_status || null,
-      billing_model: data.billing_model || 'pay_per_visit',
-      phone: data.phone.trim() || null,
-      email: data.email.trim() || null,
-      address: data.address.trim() || null,
-      city: data.city.trim() || null,
-      floor: data.floor.trim() || null,
-      arrival_notes: data.arrival_notes.trim() || null,
+      billing_model:  data.billing_model || 'pay_per_visit',
+      phone:          data.phone.trim() || null,
+      email:          data.email.trim() || null,
+      address:        data.address.trim() || null,
+      city:           data.city.trim() || null,
+      floor:          data.floor.trim() || null,
+      arrival_notes:  data.arrival_notes.trim() || null,
       business_hours: data.business_hours.trim() || null,
-      billing_terms: data.billing_terms.trim() || null,
+      billing_terms:  data.billing_terms.trim() || null,
       internal_notes: data.internal_notes.trim() || null,
     })
     .select('id')
@@ -82,8 +85,8 @@ export async function createCustomer(data: CustomerFormData): Promise<ActionResu
 
 export interface QuickCustomerResult {
   customerId?: string
-  name?: string
-  business_name?: string | null
+  name?: string | null
+  business_name?: string
   error?: string
   errors?: Record<string, string>
 }
@@ -92,8 +95,8 @@ export async function updateCustomerBilling(
   customerId: string,
   data: { name: string; business_name: string; vat_id: string }
 ): Promise<ActionResult> {
-  if (!data.name || data.name.trim().length < 2) {
-    return { errors: { name: 'שם חייב להכיל לפחות 2 תווים' } }
+  if (!data.business_name || data.business_name.trim().length < 2) {
+    return { errors: { business_name: 'שם חברה חייב להכיל לפחות 2 תווים' } }
   }
 
   const supabase = await createClient()
@@ -101,8 +104,8 @@ export async function updateCustomerBilling(
   const { error } = await supabase
     .from('customers')
     .update({
-      name:          data.name.trim(),
-      business_name: data.business_name.trim() || null,
+      business_name: data.business_name.trim(),
+      name:          data.name.trim() || null,
       vat_id:        data.vat_id.trim() || null,
     })
     .eq('id', customerId)
@@ -125,7 +128,7 @@ export async function createCustomerQuick(data: {
   internal_notes: string
 }): Promise<QuickCustomerResult> {
   const errors: Record<string, string> = {}
-  if (!data.name || data.name.trim().length < 2) errors.name = 'שם חייב להכיל לפחות 2 תווים'
+  if (!data.business_name || data.business_name.trim().length < 2) errors.business_name = 'שם חברה חייב להכיל לפחות 2 תווים'
   if (data.phone && !/^0[2-9]\d{7,8}$/.test(data.phone.replace(/[-\s]/g, ''))) errors.phone = 'מספר טלפון לא תקין'
   if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'כתובת אימייל לא תקינה'
   if (Object.keys(errors).length > 0) return { errors }
@@ -137,8 +140,8 @@ export async function createCustomerQuick(data: {
     .from('customers')
     .insert({
       tenant_id:       tenantId,
-      name:            data.name.trim(),
-      business_name:   data.business_name.trim() || null,
+      business_name:   data.business_name.trim(),
+      name:            data.name.trim() || null,
       phone:           data.phone.trim() || null,
       email:           data.email.trim() || null,
       address:         data.address.trim() || null,
@@ -156,8 +159,8 @@ export async function createCustomerQuick(data: {
   revalidatePath('/customers')
   return {
     customerId:    customer.id as string,
-    name:          customer.name as string,
-    business_name: customer.business_name as string | null,
+    business_name: customer.business_name as string,
+    name:          customer.name as string | null,
   }
 }
 
@@ -170,19 +173,20 @@ export async function updateCustomer(id: string, data: CustomerFormData): Promis
   const { error } = await supabase
     .from('customers')
     .update({
-      name: data.name.trim(),
-      business_name: data.business_name.trim() || null,
-      customer_type: data.customer_type || null,
+      business_name:  data.business_name.trim(),
+      name:           data.name.trim() || null,
+      vat_id:         data.vat_id.trim() || null,
+      customer_type:  data.customer_type || null,
       customer_status: data.customer_status || null,
-      billing_model: data.billing_model || 'pay_per_visit',
-      phone: data.phone.trim() || null,
-      email: data.email.trim() || null,
-      address: data.address.trim() || null,
-      city: data.city.trim() || null,
-      floor: data.floor.trim() || null,
-      arrival_notes: data.arrival_notes.trim() || null,
+      billing_model:  data.billing_model || 'pay_per_visit',
+      phone:          data.phone.trim() || null,
+      email:          data.email.trim() || null,
+      address:        data.address.trim() || null,
+      city:           data.city.trim() || null,
+      floor:          data.floor.trim() || null,
+      arrival_notes:  data.arrival_notes.trim() || null,
       business_hours: data.business_hours.trim() || null,
-      billing_terms: data.billing_terms.trim() || null,
+      billing_terms:  data.billing_terms.trim() || null,
       internal_notes: data.internal_notes.trim() || null,
     })
     .eq('id', id)

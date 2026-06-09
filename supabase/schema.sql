@@ -35,8 +35,8 @@ CREATE TABLE profiles (
 CREATE TABLE customers (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id        uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
-  name             text NOT NULL,
-  business_name    text,
+  name             text,
+  business_name    text NOT NULL,
   customer_type    text CHECK (customer_type IN (
                      'private', 'institution', 'small_business',
                      'large_business', 'project', 'prospect')),

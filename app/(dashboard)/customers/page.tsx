@@ -43,7 +43,7 @@ export default async function CustomersPage({ searchParams }: PageProps) {
     .from('customers')
     .select('*')
     .eq('is_deleted', false)
-    .order('name')
+    .order('business_name', { nullsFirst: false })
 
   if (q) {
     query = query.or(
@@ -123,11 +123,11 @@ export default async function CustomersPage({ searchParams }: PageProps) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-semibold text-sm leading-tight truncate group-hover:text-primary transition-colors">
-                        {customer.name}
+                        {customer.business_name || customer.name}
                       </p>
-                      {customer.business_name && (
+                      {customer.business_name && customer.name && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                          {customer.business_name}
+                          {customer.name}
                         </p>
                       )}
                     </div>

@@ -60,19 +60,20 @@ export function CustomerForm({ customer }: CustomerFormProps) {
   const [globalError, setGlobalError] = useState('')
 
   const [form, setForm] = useState<CustomerFormData>({
-    name: customer?.name ?? '',
-    business_name: customer?.business_name ?? '',
-    customer_type: (customer?.customer_type as CustomerType) ?? '',
+    business_name:  customer?.business_name ?? '',
+    name:           customer?.name ?? '',
+    vat_id:         (customer as (typeof customer & { vat_id?: string | null }))?.vat_id ?? '',
+    customer_type:  (customer?.customer_type as CustomerType) ?? '',
     customer_status: (customer?.customer_status as CustomerStatus) ?? '',
-    billing_model: (customer?.billing_model as BillingModel) ?? '',
-    phone: customer?.phone ?? '',
-    email: customer?.email ?? '',
-    address: customer?.address ?? '',
-    city: customer?.city ?? '',
-    floor: customer?.floor ?? '',
-    arrival_notes: customer?.arrival_notes ?? '',
+    billing_model:  (customer?.billing_model as BillingModel) ?? '',
+    phone:          customer?.phone ?? '',
+    email:          customer?.email ?? '',
+    address:        customer?.address ?? '',
+    city:           customer?.city ?? '',
+    floor:          customer?.floor ?? '',
+    arrival_notes:  customer?.arrival_notes ?? '',
     business_hours: customer?.business_hours ?? '',
-    billing_terms: customer?.billing_terms ?? '',
+    billing_terms:  customer?.billing_terms ?? '',
     internal_notes: customer?.internal_notes ?? '',
   })
 
@@ -130,19 +131,28 @@ export function CustomerForm({ customer }: CustomerFormProps) {
           פרטים בסיסיים
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="שם מלא *" error={errors.name}>
-            <Input
-              value={form.name}
-              onChange={(e) => set('name', e.target.value)}
-              placeholder="ישראל ישראלי"
-              aria-invalid={!!errors.name}
-            />
-          </FormField>
-          <FormField label="שם עסק" error={errors.business_name}>
+          <FormField label="שם חברה *" error={errors.business_name} className="sm:col-span-2">
             <Input
               value={form.business_name}
               onChange={(e) => set('business_name', e.target.value)}
               placeholder="שם החברה / העסק"
+              aria-invalid={!!errors.business_name}
+              autoFocus
+            />
+          </FormField>
+          <FormField label="איש קשר" error={errors.name}>
+            <Input
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="שם האיש קשר בחברה"
+            />
+          </FormField>
+          <FormField label="ח.פ / ת.ז" error={errors.vat_id}>
+            <Input
+              dir="ltr"
+              value={form.vat_id}
+              onChange={(e) => set('vat_id', e.target.value)}
+              placeholder="מספר חברה / תעודת זהות"
             />
           </FormField>
           <FormField label="טלפון" error={errors.phone}>
