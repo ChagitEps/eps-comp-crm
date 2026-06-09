@@ -96,6 +96,9 @@ All roles in `types/index.ts` with `USER_ROLE_LABELS` and `USER_ROLE_COLORS`.
 | 009 | admin hourly_rate = 250 |
 | 010 | visits_billing_summary view (updated with iCount + customer_email fields) |
 | 011 | google_refresh_token, google_calendar_id, google_connected_at on profiles |
+| 012 | notifications table |
+| 013 | vat_id on customers (ח.פ / ת.ז for iCount invoices) |
+| 014 | business_name NOT NULL, name nullable — company is the B2B anchor |
 
 ---
 
@@ -171,6 +174,10 @@ export async function myAction(): Promise<{ error?: string }> {
 - Full CRUD, soft delete
 - Tabs: פרטים, אנשי קשר, קריאות, ביקורים, ציוד, מסמכים, חיובים
 - `CustomerBillingPanel` — per-customer billing history (admin/accountant only)
+- **B2B field order:** `business_name` (שם חברה) is the primary required field; `name` (איש קשר) is optional; `vat_id` (ח.פ/ת.ז) third
+- **`Customer.business_name: string`** (NOT NULL in DB) — always present; **`Customer.name: string | null`** — optional contact person
+- All dropdowns/lists display: `"${business_name}${name ? ' — ' + name : ''}"` (company first)
+- `customers` table is ordered by `business_name` everywhere
 
 ### Module 3 — Tickets (קריאות שירות)
 - Full CRUD, status tracking (8 statuses), urgency, SLA
