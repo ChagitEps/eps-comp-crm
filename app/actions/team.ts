@@ -89,8 +89,7 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
   // ── generateLink: creates auth user + returns invite URL, NO email sent ──
   //
   // Using generateLink instead of inviteUserByEmail so we control email
-  // delivery through n8n. The returned action_link is a single-use
-  // Supabase magic link valid for 24 hours.
+  // delivery through n8n. The invite token is single-use and valid 24 hours.
   //
   const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
     type:  'invite',
@@ -108,8 +107,15 @@ export async function inviteTechnician(data: TechnicianFormData): Promise<Action
     return { error: `שגיאה ביצירת קישור ההזמנה: ${linkError.message}` }
   }
 
-  const newUserId      = linkData.user.id
-  const invitationLink = linkData.properties.action_link
+  const newUserId = linkData.user.id
+
+  // Email a link to OUR domain carrying the token_hash, instead of the raw
+  // Supabase /verify action_link. The raw link is consumed by a single GET —
+  // email scanners (Outlook SafeLinks, antivirus) kill it before the user
+  // clicks. With token_hash, the token is only consumed when the page's JS
+  // calls verifyOtp(), and the Supabase Redirect-URL allow-list is bypassed.
+  const invitationLink =
+    `${appUrl}/auth/accept-invite?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=invite`
 
   // ── Create/update profile record (admin client — bypasses RLS) ──────
   // Must use adminClient here: the new user's ID differs from the logged-in

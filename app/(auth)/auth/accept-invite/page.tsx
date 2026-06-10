@@ -9,9 +9,40 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Monitor, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 
+// URL params captured synchronously at first render, BEFORE supabase-js
+// processes (and strips) the hash fragment.
+//
+// Two link formats reach this page:
+//   New (preferred):  /auth/accept-invite?token_hash=xxx&type=invite
+//     → we call verifyOtp() ourselves; immune to email-scanner prefetch.
+//   Legacy fallback:  /auth/accept-invite#access_token=xxx&type=invite
+//     → Supabase /verify already consumed the token and redirected here;
+//       createBrowserClient parses the hash into a session asynchronously.
+//   Failed verify:    /auth/accept-invite#error=...&error_code=otp_expired&...
+interface InviteUrlParams {
+  tokenHash:     string | null
+  hasHashToken:  boolean
+  hashError:     string | null
+}
+
+function readInviteUrlParams(): InviteUrlParams {
+  if (typeof window === 'undefined') {
+    return { tokenHash: null, hasHashToken: false, hashError: null }
+  }
+  const query = new URLSearchParams(window.location.search)
+  const hash  = new URLSearchParams(window.location.hash.slice(1))
+  return {
+    tokenHash:    query.get('token_hash'),
+    hasHashToken: hash.has('access_token'),
+    hashError:    hash.get('error_description') ?? hash.get('error_code'),
+  }
+}
+
 export default function AcceptInvitePage() {
   const router  = useRouter()
   const supabase = createClient()
+
+  const [urlParams] = useState<InviteUrlParams>(readInviteUrlParams)
 
   const [userEmail,  setUserEmail]  = useState<string | null>(null)
   const [isExisting, setIsExisting] = useState(false)
@@ -23,46 +54,52 @@ export default function AcceptInvitePage() {
   const [done,       setDone]       = useState(false)
   const [checking,   setChecking]   = useState(true)
 
-  // ── Detect invite session via onAuthStateChange ────────────────────────
-  //
-  // WHY: Supabase returns invite tokens in the URL hash fragment:
-  //   /auth/accept-invite#access_token=xxx&refresh_token=yyy&type=invite
-  //
-  // getSession() resolves BEFORE createBrowserClient finishes parsing the hash,
-  // so it always returns null on first load → the page incorrectly showed
-  // "expired link" for every valid invite.
-  //
-  // onAuthStateChange fires AFTER the client has processed the hash tokens and
-  // established the session, making it the only reliable way to detect an invite.
-  //
+  // ── Establish the invite session ───────────────────────────────────────
   useEffect(() => {
     let settled = false
 
-    function applySession(session: { user: { email?: string | null; confirmed_at?: string | null } } | null) {
-      if (!session?.user) return false
-      setUserEmail(session.user.email ?? null)
-      // Invited users have not yet confirmed their email → confirmed_at is null
-      const isInvite = !session.user.confirmed_at
-      setIsExisting(!isInvite && !!session.user.confirmed_at)
-      return true
+    // ── Primary path: token_hash in the query string ─────────────────────
+    // The emailed link points directly at this page; nothing has been
+    // consumed yet. verifyOtp() exchanges the hash for a session here.
+    if (urlParams.tokenHash) {
+      supabase.auth
+        .verifyOtp({ type: 'invite', token_hash: urlParams.tokenHash })
+        .then(({ data, error: verifyError }) => {
+          if (settled) return
+          settled = true
+          if (!verifyError && data.user) {
+            setUserEmail(data.user.email ?? null)
+          }
+          setChecking(false)
+        })
+      return () => { settled = true }
     }
 
+    // ── Legacy path: session arrives via the URL hash fragment ───────────
+    //
+    // getSession() resolves BEFORE createBrowserClient finishes parsing the
+    // hash, so onAuthStateChange is the only reliable way to catch it.
+    //
+    // IMPORTANT: do NOT infer "invitee vs. already-logged-in user" from
+    // confirmed_at — Supabase confirms the email as part of verifying the
+    // invite token, so confirmed_at is ALWAYS set by the time we get the
+    // session. The only valid signal is whether the URL carried a token:
+    // hash token present → invite click; no token at all → someone who is
+    // simply logged in navigated here.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (settled) return
 
       if (event === 'INITIAL_SESSION') {
-        if (applySession(session)) {
-          // Pre-existing or hash-resolved session arrived immediately
+        if (session?.user) {
           settled = true
+          setUserEmail(session.user.email ?? null)
+          setIsExisting(!urlParams.hasHashToken)
           setChecking(false)
           return
         }
         // No session yet — if the URL has a hash token, wait for SIGNED_IN.
-        // If there is no hash at all, the link is definitely expired.
-        const hasHashToken =
-          typeof window !== 'undefined' &&
-          window.location.hash.includes('access_token')
-        if (!hasHashToken) {
+        // If there is no token at all, the link is expired/invalid.
+        if (!urlParams.hasHashToken) {
           settled = true
           setChecking(false)
         }
@@ -71,8 +108,8 @@ export default function AcceptInvitePage() {
 
       if (event === 'SIGNED_IN') {
         // Fires once the hash tokens have been exchanged for a real session
-        applySession(session)
         settled = true
+        setUserEmail(session?.user?.email ?? null)
         setChecking(false)
       }
     })
@@ -144,6 +181,11 @@ export default function AcceptInvitePage() {
                 קישורי הזמנה תקפים ל-24 שעות בלבד ולשימוש חד-פעמי.
                 <br />פנה למנהל המערכת לקבלת קישור חדש.
               </p>
+              {urlParams.hashError && (
+                <p className="text-xs text-muted-foreground/70" dir="ltr">
+                  ({urlParams.hashError.replaceAll('+', ' ')})
+                </p>
+              )}
               <Button variant="outline" className="w-full mt-2" onClick={() => router.push('/login')}>
                 חזור לכניסה
               </Button>
