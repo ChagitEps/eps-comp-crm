@@ -19,6 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -28,8 +29,18 @@ import type { Equipment, EquipmentCategory, EquipmentStatus } from '@/types'
 import {
   createEquipment,
   updateEquipment,
+  createEquipmentBatch,
   type EquipmentFormData,
 } from '@/app/actions/equipment'
+
+const EQUIPMENT_PRESETS = [
+  { value: 'דיסק', label: 'דיסק' },
+  { value: 'זיכרון', label: 'זיכרון' },
+  { value: 'לוח', label: 'לוח' },
+  { value: 'מארז', label: 'מארז' },
+  { value: 'מסך', label: 'מסך' },
+  { value: 'מעבד', label: 'מעבד' },
+]
 
 const CATEGORY_LABELS: Record<EquipmentCategory, string> = {
   servers: 'שרתים',
@@ -67,6 +78,7 @@ const EMPTY: EquipmentFormData = {
   installation_date: '',
   warranty_start: '',
   warranty_end: '',
+  quantity: '1',
   status: 'at_customer',
   location_notes: '',
   notes: '',
@@ -82,6 +94,22 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
 
+  // Quick-add: generic presets (multi-select, batch insert)
+  const [presetSelection, setPresetSelection] = useState<string[]>([])
+  const [isBatchPending, startBatchTransition] = useTransition()
+  const [batchError, setBatchError] = useState('')
+
+  function handleBatchAdd() {
+    if (presetSelection.length === 0) return
+    setBatchError('')
+    startBatchTransition(async () => {
+      const result = await createEquipmentBatch(customerId, presetSelection)
+      if (result?.error) { setBatchError(result.error); return }
+      setPresetSelection([])
+      onClose()
+    })
+  }
+
   const [form, setForm] = useState<EquipmentFormData>(() =>
     equipment
       ? {
@@ -93,6 +121,7 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
           installation_date: equipment.installation_date ?? '',
           warranty_start: equipment.warranty_start ?? '',
           warranty_end: equipment.warranty_end ?? '',
+          quantity: String(equipment.quantity ?? 1),
           status: (equipment.status as EquipmentStatus) ?? 'at_customer',
           location_notes: equipment.location_notes ?? '',
           notes: equipment.notes ?? '',
@@ -146,6 +175,41 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
             <div className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
               {globalError}
             </div>
+          )}
+
+          {/* Quick-add: generic presets */}
+          {!equipment && (
+            <>
+              <section className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">הוספה מהירה — פריטים גנריים</p>
+                {batchError && (
+                  <div className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                    {batchError}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <MultiSelect
+                    options={EQUIPMENT_PRESETS}
+                    selected={presetSelection}
+                    onChange={setPresetSelection}
+                    placeholder="בחר פריטים (דיסק, זיכרון, לוח...)"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBatchAdd}
+                    disabled={presetSelection.length === 0 || isBatchPending}
+                    className="shrink-0 gap-1.5"
+                  >
+                    {isBatchPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                    הוסף פריטים
+                  </Button>
+                </div>
+              </section>
+
+              <Separator />
+            </>
           )}
 
           {/* Basic info */}
@@ -204,6 +268,17 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
               <div className="space-y-1.5">
                 <Label>דגם</Label>
                 <Input value={form.model} onChange={(e) => set('model', e.target.value)} placeholder="Latitude 5520..." />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>כמות</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.quantity}
+                  onChange={(e) => set('quantity', e.target.value)}
+                  dir="ltr"
+                />
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">

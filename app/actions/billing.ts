@@ -45,7 +45,7 @@ export async function finalizeVisitBilling(
   const { data: visit, error: visitErr } = await supabase
     .from('visits')
     .select(`
-      id, duration_minutes, equipment_cost, status,
+      id, duration_minutes, total_billing_minutes, equipment_cost, status,
       technician_id,
       technician:technician_id(hourly_rate),
       ticket:tickets(
@@ -64,10 +64,12 @@ export async function finalizeVisitBilling(
   const ticket     = visit.ticket     as unknown as { id: string; customer: { billing_model: string | null } | null } | null
   const customer   = ticket?.customer ?? null
 
-  const isContract      = customer?.billing_model === 'contract'
-  const hourlyRate      = technician?.hourly_rate ?? 0
-  const durationHours   = (visit.duration_minutes ?? 0) / 60
-  const fixedCost       = options.fixedCost ?? 0
+  const isContract = customer?.billing_model === 'contract'
+  const hourlyRate = technician?.hourly_rate ?? 0
+  // Prefer total_billing_minutes (sum of all attendance logs); fall back to duration_minutes
+  const effectiveMinutes = (visit as unknown as { total_billing_minutes: number | null }).total_billing_minutes ?? visit.duration_minutes ?? 0
+  const durationHours    = effectiveMinutes / 60
+  const fixedCost        = options.fixedCost ?? 0
 
   // ── 2. חישוב עלות עבודה ──────────────────────────────────────────────
   const workCost = isContract ? 0 : Math.round(durationHours * hourlyRate * 100) / 100

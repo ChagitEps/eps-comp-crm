@@ -21,6 +21,7 @@ export interface EquipmentFormData {
   installation_date: string
   warranty_start: string
   warranty_end: string
+  quantity: string
   status: EquipmentStatus | ''
   location_notes: string
   notes: string
@@ -45,6 +46,11 @@ function validateEquipment(data: EquipmentFormData): Record<string, string> {
   return errors
 }
 
+function parseQuantity(value: string): number {
+  const n = parseInt(value, 10)
+  return Number.isFinite(n) && n >= 1 ? n : 1
+}
+
 export async function createEquipment(
   customerId: string,
   data: EquipmentFormData
@@ -66,6 +72,7 @@ export async function createEquipment(
     installation_date: data.installation_date || null,
     warranty_start: data.warranty_start || null,
     warranty_end: data.warranty_end || null,
+    quantity: parseQuantity(data.quantity),
     status: data.status || 'at_customer',
     location_notes: data.location_notes.trim() || null,
     notes: data.notes.trim() || null,
@@ -103,6 +110,7 @@ export async function updateEquipment(
       installation_date: data.installation_date || null,
       warranty_start: data.warranty_start || null,
       warranty_end: data.warranty_end || null,
+      quantity: parseQuantity(data.quantity),
       status: data.status || 'at_customer',
       location_notes: data.location_notes.trim() || null,
       notes: data.notes.trim() || null,
@@ -195,6 +203,61 @@ export async function createEquipmentAndLinkToVisit(
   if (linkError) return { error: 'הציוד נוצר אך לא הצלחנו לקשר אותו לביקור.' }
 
   revalidatePath(`/visits/${visitId}`)
+  return {}
+}
+
+// ── Inline quantity counter (+/-) on the equipment list ───────────────────
+export async function updateEquipmentQuantity(
+  equipmentId: string,
+  customerId: string,
+  delta: number
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: current, error: fetchError } = await supabase
+    .from('equipment')
+    .select('quantity')
+    .eq('id', equipmentId)
+    .single()
+
+  if (fetchError || !current) return { error: 'שגיאה בעדכון הכמות.' }
+
+  const newQuantity = Math.max(1, (current.quantity ?? 1) + delta)
+
+  const { error } = await supabase
+    .from('equipment')
+    .update({ quantity: newQuantity })
+    .eq('id', equipmentId)
+
+  if (error) return { error: 'שגיאה בעדכון הכמות.' }
+
+  revalidatePath(`/customers/${customerId}`)
+  return {}
+}
+
+// ── Batch-create generic preset items (e.g. דיסק, זיכרון, לוח...) ──────────
+export async function createEquipmentBatch(
+  customerId: string,
+  equipmentTypes: string[]
+): Promise<ActionResult> {
+  if (!equipmentTypes.length) return { error: 'יש לבחור לפחות פריט אחד.' }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { error } = await supabase.from('equipment').insert(
+    equipmentTypes.map((type) => ({
+      tenant_id: tenantId,
+      customer_id: customerId,
+      equipment_type: type,
+      status: 'at_customer',
+      quantity: 1,
+    }))
+  )
+
+  if (error) return { error: 'שגיאה בהוספת הציוד.' }
+
+  revalidatePath(`/customers/${customerId}`)
   return {}
 }
 

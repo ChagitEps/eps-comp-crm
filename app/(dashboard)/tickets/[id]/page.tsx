@@ -233,21 +233,31 @@ export default async function TicketDetailPage({ params }: PageProps) {
       {/* Visits */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">ביקורים ({visits?.length ?? 0})</h2>
-          <Link
-            href={`/visits/new?ticket=${id}`}
-            className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
-          >
-            <Wrench className="h-3.5 w-3.5" />
-            פתח ביקור
-          </Link>
+          <h2 className="text-sm font-semibold">סביבת עבודה</h2>
+          {visits && visits.length > 0 ? (
+            <Link
+              href={`/visits/${visits[0].id}`}
+              className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              פתח סביבת עבודה
+            </Link>
+          ) : (
+            <Link
+              href={`/visits/new?ticket=${id}`}
+              className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              התחל עבודה
+            </Link>
+          )}
         </div>
 
         {!visits || visits.length === 0 ? (
           <EmptyState
             icon={Wrench}
-            title="אין ביקורים"
-            description='לחץ על "פתח ביקור" כדי לתעד ביקור'
+            title="אין ביקור פתוח"
+            description='לחץ על "התחל עבודה" כדי לפתוח את סביבת העבודה לקריאה זו'
           />
         ) : (
           <div className="grid gap-2">
@@ -261,8 +271,8 @@ export default async function TicketDetailPage({ params }: PageProps) {
                 >
                   <div className="space-y-0.5 min-w-0">
                     <p className="text-sm font-medium">
-                      {visit.start_time
-                        ? new Date(visit.start_time).toLocaleDateString('he-IL', {
+                      {visit.created_at
+                        ? new Date(visit.created_at).toLocaleDateString('he-IL', {
                             day: 'numeric', month: 'short', year: 'numeric',
                           })
                         : 'ביקור מתוכנן'}

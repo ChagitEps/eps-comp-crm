@@ -1,19 +1,16 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
+import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { VisitForm } from '@/components/visits/visit-form'
 import { VisitNewForm } from '@/components/visits/visit-new-form'
-import { PreviousVisitsSummary } from '@/components/visits/previous-visits-summary'
-import type { PreviousVisitRow } from '@/components/visits/previous-visits-summary'
-import { notFound } from 'next/navigation'
 import type { UserRole } from '@/types'
 
 interface PageProps {
-  searchParams: Promise<{ ticket?: string; customer?: string; prev_visit?: string }>
+  searchParams: Promise<{ ticket?: string; customer?: string }>
 }
 
 async function fetchWarehouseItems(supabase: Awaited<ReturnType<typeof createClient>>, isJunior: boolean) {
-  // Always fetch sell_price; strip it server-side for junior technicians
   const { data } = await supabase
     .from('warehouse_items')
     .select('id, name, sku, quantity, category, sell_price')
@@ -21,17 +18,17 @@ async function fetchWarehouseItems(supabase: Awaited<ReturnType<typeof createCli
     .gt('quantity', 0)
     .order('name')
   return (data ?? []).map(i => ({
-    id: i.id as string,
-    name: i.name as string,
-    sku: i.sku as string | null,
-    quantity: i.quantity as number,
-    category: i.category as string | null,
+    id:         i.id as string,
+    name:       i.name as string,
+    sku:        i.sku as string | null,
+    quantity:   i.quantity as number,
+    category:   i.category as string | null,
     sell_price: isJunior ? null : (i.sell_price as number | null),
   }))
 }
 
 export default async function NewVisitPage({ searchParams }: PageProps) {
-  const { ticket: ticketId, customer: preselectedCustomerId, prev_visit: prevVisitId } = await searchParams
+  const { ticket: ticketId, customer: preselectedCustomerId } = await searchParams
   const supabase = await createClient()
 
   // Get current user role
@@ -44,7 +41,19 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
 
   // ── Case A: ticket pre-selected ──────────────────────────────────────
   if (ticketId) {
-    const [{ data: ticket }, { data: technicians }, warehouseItems, authResult, prevVisitRes] = await Promise.all([
+    // If this ticket already has a visit → redirect to it (one visit per ticket)
+    const { data: existingVisit } = await supabase
+      .from('visits')
+      .select('id')
+      .eq('ticket_id', ticketId)
+      .eq('is_deleted', false)
+      .maybeSingle()
+
+    if (existingVisit) {
+      redirect(`/visits/${existingVisit.id}`)
+    }
+
+    const [{ data: ticket }, { data: technicians }, warehouseItems, authResult] = await Promise.all([
       supabase
         .from('tickets')
         .select('id, title, ticket_number, description, customer:customers(id, name, business_name, billing_model), assigned_technician:assigned_technician_id(id, full_name, hourly_rate)')
@@ -58,18 +67,12 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
         .order('full_name'),
       fetchWarehouseItems(supabase, isJunior),
       supabase.auth.getUser(),
-      // Fetch ALL previous visits for this ticket (for the summary panel)
-      supabase
-        .from('visits')
-        .select('id, start_time, duration_minutes, visit_type, status, work_description, notes, technician:technician_id(full_name)')
-        .eq('ticket_id', ticketId)
-        .order('start_time', { ascending: false }),
     ])
 
     if (!ticket) notFound()
 
     const customer = ticket.customer as unknown as {
-      id: string; name: string; business_name: string | null; billing_model: string | null
+      id: string; name: string | null; business_name: string; billing_model: string | null
     } | null
     const assignedTech = ticket.assigned_technician as unknown as {
       id: string; full_name: string; hourly_rate: number | null
@@ -77,36 +80,16 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
 
     const currentUserId = authResult.data.user?.id ?? ''
     const defaultTechId = assignedTech?.id ?? currentUserId
-    const defaultTech = (technicians ?? []).find(t => t.id === defaultTechId)
+    const defaultTech   = (technicians ?? []).find(t => t.id === defaultTechId)
 
     const context = {
       ticketId,
-      ticketTitle: `#${ticket.ticket_number} — ${ticket.title}`,
-      customerName: customer?.business_name ?? customer?.name ?? '',
-      customerId:   customer?.id,
-      billingModel: (customer?.billing_model as 'contract' | 'pay_per_visit' | null) ?? null,
+      ticketTitle:          `#${ticket.ticket_number} — ${ticket.title}`,
+      customerName:         customer?.business_name ?? customer?.name ?? '',
+      customerId:           customer?.id,
+      billingModel:         (customer?.billing_model as 'contract' | 'pay_per_visit' | null) ?? null,
       technicianHourlyRate: defaultTech?.hourly_rate ?? null,
     }
-
-    const allPrevVisits: PreviousVisitRow[] = (prevVisitRes.data ?? []).map((v: unknown) => {
-      const row = v as {
-        id: string; start_time: string | null; duration_minutes: number | null
-        visit_type: string; status: string; work_description: string | null; notes: string | null
-        technician: { full_name: string } | null
-      }
-      return {
-        id:               row.id,
-        start_time:       row.start_time,
-        duration_minutes: row.duration_minutes,
-        visit_type:       row.visit_type,
-        status:           row.status,
-        work_description: row.work_description,
-        notes:            row.notes,
-        technician_name:  (row.technician as unknown as { full_name: string } | null)?.full_name ?? null,
-      }
-    })
-
-    const isFollowUp = !!prevVisitId
 
     return (
       <div className="max-w-2xl mx-auto space-y-6">
@@ -117,22 +100,13 @@ export default async function NewVisitPage({ searchParams }: PageProps) {
             #{ticket.ticket_number}
           </Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground">{isFollowUp ? 'ביקור המשך' : 'ביקור חדש'}</span>
+          <span className="text-foreground">ביקור חדש</span>
         </nav>
 
         <div>
-          <h1 className="text-xl font-bold">{isFollowUp ? 'ביקור המשך' : 'תיעוד ביקור'}</h1>
+          <h1 className="text-xl font-bold">תיעוד ביקור</h1>
           <p className="text-sm text-muted-foreground mt-1">{ticket.title}</p>
         </div>
-
-        {/* All previous visits for this ticket — shown when there are any */}
-        {allPrevVisits.length > 0 && (
-          <PreviousVisitsSummary
-            visits={allPrevVisits}
-            ticketNumber={ticket.ticket_number}
-            defaultOpen={isFollowUp}
-          />
-        )}
 
         <div className="bg-card border border-border rounded-xl p-5">
           <VisitForm

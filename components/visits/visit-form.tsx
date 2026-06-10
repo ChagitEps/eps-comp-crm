@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import {
   Select, SelectContent, SelectItem, SelectTrigger,
 } from '@/components/ui/select'
-import { Loader2, Clock, Calculator, Package, Plus, X } from 'lucide-react'
+import { Loader2, Package, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VISIT_TYPE_LABELS } from '@/types'
 import type { Profile, VisitType, UserRole } from '@/types'
@@ -24,58 +23,31 @@ import {
 interface CustomItem { name: string; price: string }
 
 interface VisitContext {
-  ticketId: string
-  ticketTitle: string
-  customerName: string
-  billingModel: 'contract' | 'pay_per_visit' | null
+  ticketId:             string
+  ticketTitle:          string
+  customerName:         string
+  billingModel:         'contract' | 'pay_per_visit' | null
   technicianHourlyRate: number | null
 }
 
 interface ExistingVisit {
-  id: string
-  technician_id: string
-  visit_type: string
-  start_time: string | null
-  end_time: string | null
-  work_description: string | null
-  notes: string | null
-  equipment_cost: number
+  id:               string
+  technician_id:    string
+  visit_type:       string
+  equipment_cost:   number
 }
 
 interface VisitFormProps {
-  context: VisitContext
-  technicians: Pick<Profile, 'id' | 'full_name'>[]
+  context:             VisitContext
+  technicians:         Pick<Profile, 'id' | 'full_name'>[]
   currentTechnicianId: string
-  existingVisit?: ExistingVisit
-  warehouseItems?: WarehousePickerItem[]  // ← NEW: available stock items
-  userRole?: UserRole                      // ← NEW: for permission-based display
+  existingVisit?:      ExistingVisit
+  warehouseItems?:     WarehousePickerItem[]
+  userRole?:           UserRole
 }
 
 const VISIT_TYPE_OPTIONS = (Object.entries(VISIT_TYPE_LABELS) as [VisitType, string][])
   .map(([value, label]) => ({ value, label }))
-
-function toDatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return ''
-  return iso.slice(0, 16)
-}
-
-function calcDurationLabel(start: string, end: string): string | null {
-  if (!start || !end) return null
-  const diff = new Date(end).getTime() - new Date(start).getTime()
-  if (diff <= 0) return null
-  const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000)
-  if (h === 0) return `${m} דקות`
-  if (m === 0) return `${h} שעות`
-  return `${h} שעות ו-${m} דקות`
-}
-
-function calcWorkCost(start: string, end: string, rate: number | null, isContract: boolean): number | null {
-  if (isContract) return 0
-  if (!start || !end || !rate) return null
-  const diff = new Date(end).getTime() - new Date(start).getTime()
-  if (diff <= 0) return null
-  return Math.round(((diff / 3600000) * rate) * 100) / 100
-}
 
 export function VisitForm({
   context, technicians, currentTechnicianId, existingVisit,
@@ -83,21 +55,17 @@ export function VisitForm({
 }: VisitFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [globalError, setGlobalError] = useState('')
+  const [errors, setErrors]             = useState<Record<string, string>>({})
+  const [globalError, setGlobalError]   = useState('')
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
-  const [customItems, setCustomItems] = useState<CustomItem[]>([])
+  const [customItems, setCustomItems]   = useState<CustomItem[]>([])
   const [customItemForm, setCustomItemForm] = useState({ name: '', price: '' })
 
   const [form, setForm] = useState<VisitFormData>({
-    ticket_id: context.ticketId,
-    technician_id: existingVisit?.technician_id ?? currentTechnicianId,
-    visit_type: (existingVisit?.visit_type as VisitType) ?? 'computing',
-    start_time: toDatetimeLocal(existingVisit?.start_time),
-    end_time: toDatetimeLocal(existingVisit?.end_time),
-    work_description: existingVisit?.work_description ?? '',
-    notes: existingVisit?.notes ?? '',
-    equipment_cost: existingVisit?.equipment_cost?.toString() ?? '0',
+    ticket_id:               context.ticketId,
+    technician_id:           existingVisit?.technician_id ?? currentTechnicianId,
+    visit_type:              (existingVisit?.visit_type as VisitType) ?? 'computing',
+    equipment_cost:          existingVisit?.equipment_cost?.toString() ?? '0',
     selected_warehouse_items: [],
   })
 
@@ -106,22 +74,14 @@ export function VisitForm({
     if (errors[field as string]) setErrors(p => { const e = { ...p }; delete e[field as string]; return e })
   }
 
-  const isContract = context.billingModel === 'contract'
-  const showPrices = userRole !== 'technician_junior'
+  const isContract  = context.billingModel === 'contract'
+  const showPrices  = userRole !== 'technician_junior'
 
-  // Auto-calculate equipment cost from selected warehouse items
   const warehouseEquipmentCost = selectedItems.reduce(
     (sum, s) => sum + (s.unit_price ?? 0) * s.qty, 0
   )
-  // Custom items (non-warehouse parts typed manually by technician)
   const customItemsTotal = customItems.reduce((s, i) => s + (parseFloat(i.price) || 0), 0)
   const totalEquipmentCost = warehouseEquipmentCost + customItemsTotal
-
-  const durationLabel = calcDurationLabel(form.start_time, form.end_time)
-  const workCost = calcWorkCost(form.start_time, form.end_time, context.technicianHourlyRate, isContract)
-  const totalCost = workCost !== null
-    ? Math.round((workCost + totalEquipmentCost) * 100) / 100
-    : null
 
   const selectedTech = technicians.find(t => t.id === form.technician_id)
   const selectedType = form.visit_type ? VISIT_TYPE_LABELS[form.visit_type as VisitType] : null
@@ -142,7 +102,7 @@ export function VisitForm({
     startTransition(async () => {
       const submitData: VisitFormData = {
         ...form,
-        equipment_cost: totalEquipmentCost.toString(),
+        equipment_cost:          totalEquipmentCost.toString(),
         selected_warehouse_items: selectedItems,
       }
       let result: ActionResult
@@ -212,54 +172,7 @@ export function VisitForm({
 
       <Separator />
 
-      {/* Times */}
-      <section className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">זמנים</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>שעת התחלה</Label>
-            <Input type="datetime-local" value={form.start_time}
-              onChange={e => set('start_time', e.target.value)} dir="ltr" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>שעת סיום</Label>
-            <Input type="datetime-local" value={form.end_time}
-              onChange={e => set('end_time', e.target.value)} dir="ltr" />
-            {errors.end_time && <p className="text-xs text-destructive">{errors.end_time}</p>}
-          </div>
-        </div>
-        {durationLabel && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span>משך ביקור: <strong className="text-foreground">{durationLabel}</strong></span>
-          </div>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* Work */}
-      <section className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">עבודה שבוצעה</h3>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>תיאור העבודה</Label>
-            <Textarea value={form.work_description}
-              onChange={e => set('work_description', e.target.value)}
-              placeholder="פרט את העבודה שבוצעה..." rows={4} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>הערות נוספות</Label>
-            <Textarea value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="הערות, המלצות, פעולות עתידיות..." rows={2} />
-          </div>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Warehouse items — NEW */}
+      {/* Warehouse items */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
           <Package className="h-4 w-4" />
@@ -275,7 +188,7 @@ export function VisitForm({
           userRole={userRole}
         />
 
-        {/* Custom items — parts not in warehouse (no stock decrement) */}
+        {/* Custom items */}
         <div className="space-y-3">
           <Label className="text-xs text-muted-foreground">פריטים מותאמים אישית (אינם מהמחסן)</Label>
           <div className="flex gap-2">
@@ -334,25 +247,12 @@ export function VisitForm({
         </div>
       </section>
 
-      <Separator />
-
-      {/* Costs summary */}
-      <section className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">עלויות</h3>
-        <div className="space-y-2">
-          {/* Work cost */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm">
-            <Calculator className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-muted-foreground">עלות עבודה:</span>
-            <span className={cn('font-medium', isContract && 'text-emerald-600')}>
-              {isContract ? 'ללא חיוב (חוזה)' :
-               workCost !== null ? `₪${workCost.toLocaleString('he-IL')}` :
-               context.technicianHourlyRate ? 'הזן שעות לחישוב' : 'הגדר תעריף'}
-            </span>
-          </div>
-
-          {/* Equipment cost breakdown (admin/senior only) */}
-          {showPrices && totalEquipmentCost > 0 && (
+      {/* Equipment cost summary (admin/senior only) */}
+      {showPrices && totalEquipmentCost > 0 && (
+        <>
+          <Separator />
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">עלויות ציוד</h3>
             <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm space-y-1">
               {warehouseEquipmentCost > 0 && (
                 <div className="flex justify-between text-muted-foreground">
@@ -366,24 +266,17 @@ export function VisitForm({
                   <span>₪{customItemsTotal.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-medium border-t border-border pt-1">
+              <div className="flex justify-between font-semibold border-t border-border pt-1">
                 <span>סה״כ ציוד:</span>
                 <span>₪{totalEquipmentCost.toFixed(2)}</span>
               </div>
             </div>
-          )}
-
-          {/* Grand total */}
-          {totalCost !== null && (
-            <div className="flex items-center justify-between px-4 py-3 bg-primary/5 border border-primary/20 rounded-lg">
-              <span className="text-sm font-semibold">סה״כ לחיוב</span>
-              <span className="text-lg font-bold text-primary">
-                ₪{totalCost.toLocaleString('he-IL')}
-              </span>
-            </div>
-          )}
-        </div>
-      </section>
+            <p className="text-xs text-muted-foreground">
+              עלות עבודה תחושב אוטומטית לפי דיווחי הגעה
+            </p>
+          </section>
+        </>
+      )}
 
       {/* Actions */}
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">

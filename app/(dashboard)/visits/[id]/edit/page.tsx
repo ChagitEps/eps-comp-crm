@@ -68,14 +68,10 @@ export default async function EditVisitPage({ params }: PageProps) {
           technicians={technicians ?? []}
           currentTechnicianId={authResult.data.user?.id ?? ''}
           existingVisit={{
-            id: visit.id,
-            technician_id: visit.technician_id,
-            visit_type: visit.visit_type,
-            start_time: visit.start_time,
-            end_time: visit.end_time,
-            work_description: visit.work_description,
-            notes: visit.notes,
-            equipment_cost: visit.equipment_cost ?? 0,
+            id:               visit.id,
+            technician_id:    visit.technician_id,
+            visit_type:       visit.visit_type,
+            equipment_cost:   visit.equipment_cost ?? 0,
           }}
         />
       </div>

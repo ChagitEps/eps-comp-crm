@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Plus, Edit, Trash2, Wifi, Monitor, AlertTriangle } from 'lucide-react'
+import { Plus, Edit, Trash2, Wifi, Monitor, AlertTriangle, Minus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EquipmentForm } from './equipment-form'
-import { softDeleteEquipment } from '@/app/actions/equipment'
+import { softDeleteEquipment, updateEquipmentQuantity } from '@/app/actions/equipment'
 import { EQUIPMENT_STATUS_LABELS } from '@/types'
 import type { Equipment, EquipmentStatus } from '@/types'
 import { cn } from '@/lib/utils'
@@ -79,6 +79,12 @@ export function EquipmentSection({ customerId, equipment }: EquipmentSectionProp
     })
   }
 
+  function handleQuantityChange(id: string, delta: number) {
+    startTransition(async () => {
+      await updateEquipmentQuantity(id, customerId, delta)
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -113,6 +119,26 @@ export function EquipmentSection({ customerId, equipment }: EquipmentSectionProp
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-0.5 rounded-md border border-border">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleQuantityChange(item.id, -1)}
+                      disabled={item.quantity <= 1}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="w-5 text-center text-xs font-medium tabular-nums">{item.quantity}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleQuantityChange(item.id, 1)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
                   <StatusBadge
                     label={EQUIPMENT_STATUS_LABELS[item.status as EquipmentStatus]}
                     colorClass={STATUS_COLORS[item.status as EquipmentStatus]}

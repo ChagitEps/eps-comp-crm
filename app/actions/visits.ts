@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantId } from '@/lib/supabase/get-tenant'
 import { finalizeVisitBilling } from '@/app/actions/billing'
+import { recalculateVisitTotals } from '@/app/actions/visit-attendances'
 import type { VisitType, VisitStatus } from '@/types'
 
 export interface SelectedWarehouseItem {
@@ -18,10 +19,6 @@ export interface VisitFormData {
   ticket_id: string
   technician_id: string
   visit_type: VisitType | ''
-  start_time: string
-  end_time: string
-  work_description: string
-  notes: string
   equipment_cost: string
   selected_warehouse_items: SelectedWarehouseItem[]
 }
@@ -36,25 +33,7 @@ function validateVisit(data: VisitFormData): Record<string, string> {
   if (!data.ticket_id) errors.ticket_id = 'קריאה חסרה'
   if (!data.technician_id) errors.technician_id = 'יש לבחור טכנאי'
   if (!data.visit_type) errors.visit_type = 'יש לבחור סוג ביקור'
-  if (data.start_time && data.end_time && data.end_time <= data.start_time) {
-    errors.end_time = 'שעת סיום חייבת להיות אחרי שעת התחלה'
-  }
   return errors
-}
-
-function calcDuration(start: string, end: string): number | null {
-  if (!start || !end) return null
-  const diff = new Date(end).getTime() - new Date(start).getTime()
-  return diff > 0 ? Math.round(diff / 60000) : null
-}
-
-function calcWorkCost(
-  durationMinutes: number | null,
-  hourlyRate: number | null,
-  isContract: boolean
-): number {
-  if (isContract || !durationMinutes || !hourlyRate) return 0
-  return Math.round(((durationMinutes / 60) * hourlyRate) * 100) / 100
 }
 
 export async function createVisit(data: VisitFormData): Promise<ActionResult> {
@@ -64,34 +43,7 @@ export async function createVisit(data: VisitFormData): Promise<ActionResult> {
   const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
   if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
 
-  // Fetch technician hourly rate + customer billing model in parallel
-  const [{ data: profile }, { data: ticket }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('hourly_rate')
-      .eq('id', data.technician_id)
-      .single(),
-    supabase
-      .from('tickets')
-      .select('customer:customers(id, billing_model)')
-      .eq('id', data.ticket_id)
-      .single(),
-  ])
-
-  const ticketCustomer = ticket?.customer as unknown as { id: string; billing_model: string | null } | null
-  const isContract = ticketCustomer?.billing_model === 'contract'
-  const hourlyRate = profile?.hourly_rate ?? null
-  const durationMinutes = calcDuration(data.start_time, data.end_time)
-  const workCost = calcWorkCost(durationMinutes, hourlyRate, isContract)
   const equipmentCost = parseFloat(data.equipment_cost) || 0
-  const totalCost = Math.round((workCost + equipmentCost) * 100) / 100
-
-  // Status: completed if both times set, in_progress if only start, scheduled otherwise
-  const status = data.start_time && data.end_time
-    ? 'completed'
-    : data.start_time
-    ? 'in_progress'
-    : 'scheduled'
 
   const { data: visit, error } = await supabase
     .from('visits')
@@ -100,20 +52,20 @@ export async function createVisit(data: VisitFormData): Promise<ActionResult> {
       ticket_id: data.ticket_id,
       technician_id: data.technician_id,
       visit_type: data.visit_type || 'computing',
-      status,
-      start_time: data.start_time || null,
-      end_time: data.end_time || null,
-      duration_minutes: durationMinutes,
-      work_description: data.work_description.trim() || null,
-      notes: data.notes.trim() || null,
-      work_cost: workCost,
+      status: 'scheduled',
       equipment_cost: equipmentCost,
-      total_cost: totalCost,
+      total_cost: equipmentCost,
     })
     .select('id')
     .single()
 
   if (error) return { error: 'שגיאה בשמירת הביקור. אנא נסה שוב.' }
+
+  // ── Auto-create the first attendance log entry ("הגעה #1") ─────────────
+  await supabase.from('visit_attendances').insert({
+    tenant_id: tenantId,
+    visit_id:  visit.id,
+  })
 
   // ── Save warehouse items + record stock movements ─────────────────────
   if (data.selected_warehouse_items?.length > 0) {
@@ -202,120 +154,27 @@ export async function updateVisitStatus(
   return {}
 }
 
-// ── Timer actions ─────────────────────────────────────────────────────────
-
-export async function startVisit(visitId: string): Promise<ActionResult> {
+// ── Mark a visit as complete (triggers billing finalization) ─────────────
+// Called when the technician explicitly marks the job as done.
+// Time tracking is now handled per-attendance via visit-attendances.ts.
+export async function completeVisit(visitId: string): Promise<ActionResult> {
   const supabase = await createClient()
 
   const { error } = await supabase
     .from('visits')
-    .update({
-      status:     'in_progress',
-      start_time: new Date().toISOString(),
-      end_time:   null,
-    })
-    .eq('id', visitId)
-
-  if (error) return { error: 'שגיאה בהתחלת הביקור.' }
-
-  revalidatePath(`/visits/${visitId}`)
-  revalidatePath('/visits')
-  revalidatePath('/calendar')
-  return {}
-}
-
-export async function endVisit(visitId: string): Promise<ActionResult> {
-  const supabase = await createClient()
-
-  // Fetch start_time to calculate duration
-  const { data: visit } = await supabase
-    .from('visits')
-    .select('start_time')
-    .eq('id', visitId)
-    .single()
-
-  const now      = new Date()
-  const endIso   = now.toISOString()
-  const startMs  = visit?.start_time ? new Date(visit.start_time).getTime() : now.getTime()
-  const diffMins = Math.max(1, Math.round((now.getTime() - startMs) / 60000))
-
-  const { error } = await supabase
-    .from('visits')
-    .update({
-      status:           'completed',
-      end_time:         endIso,
-      duration_minutes: diffMins,
-    })
+    .update({ status: 'completed' })
     .eq('id', visitId)
 
   if (error) return { error: 'שגיאה בסיום הביקור.' }
 
-  // Auto-calculate billing (same logic as updateVisitStatus 'completed')
   finalizeVisitBilling(visitId).catch((err) => {
-    console.error('[visits] endVisit billing failed:', visitId, err)
+    console.error('[visits] completeVisit billing failed:', visitId, err)
   })
 
   revalidatePath(`/visits/${visitId}`)
   revalidatePath('/visits')
   revalidatePath('/finance')
   revalidatePath('/calendar')
-  return {}
-}
-
-// ── Close visit with manually entered duration ────────────────────────────
-export async function endVisitManual(
-  visitId: string,
-  hours:   number,
-  minutes: number
-): Promise<ActionResult> {
-  const totalMins = Math.max(1, hours * 60 + minutes)
-  const supabase  = await createClient()
-
-  const { error } = await supabase
-    .from('visits')
-    .update({
-      status:           'completed',
-      end_time:         new Date().toISOString(),
-      duration_minutes: totalMins,
-    })
-    .eq('id', visitId)
-
-  if (error) return { error: 'שגיאה בשמירת הזמן.' }
-
-  finalizeVisitBilling(visitId).catch((err) => {
-    console.error('[visits] endVisitManual billing failed:', visitId, err)
-  })
-
-  revalidatePath(`/visits/${visitId}`)
-  revalidatePath('/visits')
-  revalidatePath('/finance')
-  revalidatePath('/calendar')
-  return {}
-}
-
-// ── Fix duration on already-completed visit ───────────────────────────────
-export async function fixVisitDuration(
-  visitId: string,
-  hours:   number,
-  minutes: number
-): Promise<ActionResult> {
-  const totalMins = Math.max(1, hours * 60 + minutes)
-  const supabase  = await createClient()
-
-  const { error } = await supabase
-    .from('visits')
-    .update({ duration_minutes: totalMins })
-    .eq('id', visitId)
-
-  if (error) return { error: 'שגיאה בעדכון המשך.' }
-
-  // Recalculate billing with new duration
-  finalizeVisitBilling(visitId).catch((err) => {
-    console.error('[visits] fixVisitDuration billing failed:', visitId, err)
-  })
-
-  revalidatePath(`/visits/${visitId}`)
-  revalidatePath('/finance')
   return {}
 }
 
@@ -325,52 +184,20 @@ export async function updateVisit(visitId: string, data: VisitFormData): Promise
 
   const supabase = await createClient()
 
-  // Re-calculate costs on update
-  const [{ data: profile }, { data: ticket }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('hourly_rate')
-      .eq('id', data.technician_id)
-      .single(),
-    supabase
-      .from('tickets')
-      .select('customer:customers(billing_model)')
-      .eq('id', data.ticket_id)
-      .single(),
-  ])
-
-  const isContract =
-    (ticket?.customer as unknown as { billing_model: string | null } | null)?.billing_model === 'contract'
-  const hourlyRate = profile?.hourly_rate ?? null
-  const durationMinutes = calcDuration(data.start_time, data.end_time)
-  const workCost = calcWorkCost(durationMinutes, hourlyRate, isContract)
-  const equipmentCost = parseFloat(data.equipment_cost) || 0
-  const totalCost = Math.round((workCost + equipmentCost) * 100) / 100
-
-  const status = data.start_time && data.end_time
-    ? 'completed'
-    : data.start_time
-    ? 'in_progress'
-    : 'scheduled'
-
   const { error } = await supabase
     .from('visits')
     .update({
       technician_id: data.technician_id,
       visit_type: data.visit_type || 'computing',
-      status,
-      start_time: data.start_time || null,
-      end_time: data.end_time || null,
-      duration_minutes: durationMinutes,
-      work_description: data.work_description.trim() || null,
-      notes: data.notes.trim() || null,
-      work_cost: workCost,
-      equipment_cost: equipmentCost,
-      total_cost: totalCost,
+      equipment_cost: parseFloat(data.equipment_cost) || 0,
     })
     .eq('id', visitId)
 
   if (error) return { error: 'שגיאה בעדכון הביקור.' }
+
+  // Recompute work_cost/equipment_cost/total_cost from accrued attendance
+  // minutes + the new manual equipment cost + warehouse items
+  await recalculateVisitTotals(visitId)
 
   revalidatePath(`/visits/${visitId}`)
   revalidatePath(`/tickets/${data.ticket_id}`)

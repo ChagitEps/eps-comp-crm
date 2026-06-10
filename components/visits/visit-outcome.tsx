@@ -3,27 +3,22 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  CheckCircle2, RefreshCw, Clock, ChevronDown,
-  Loader2, PlusCircle, AlertCircle,
+  CheckCircle2, Clock, ChevronDown,
+  Loader2, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button'
 import { updateTicketStatus } from '@/app/actions/tickets'
 import { cn } from '@/lib/utils'
 import type { TicketStatus } from '@/types'
 
-// ── Types ─────────────────────────────────────────────────────────────────
-
-type OutcomeId = 'resolved' | 'follow_up' | 'waiting'
+type OutcomeId = 'resolved' | 'waiting'
 type WaitingFor = 'waiting_equipment' | 'waiting_supplier' | 'waiting_customer'
 
 interface VisitOutcomeProps {
-  visitId:         string
-  ticketId:        string
-  currentStatus:   TicketStatus    // current ticket status (to avoid re-submit)
+  visitId:       string
+  ticketId:      string
+  currentStatus: TicketStatus
 }
-
-// ── Option definitions ────────────────────────────────────────────────────
 
 const OUTCOMES: { id: OutcomeId; label: string; desc: string; icon: React.ElementType; color: string }[] = [
   {
@@ -32,13 +27,6 @@ const OUTCOMES: { id: OutcomeId; label: string; desc: string; icon: React.Elemen
     desc:  'הקריאה תסגר ותועבר לסטטוס "הושלם"',
     icon:  CheckCircle2,
     color: 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-emerald-400',
-  },
-  {
-    id:    'follow_up',
-    label: 'נדרש טיפול נוסף',
-    desc:  'הקריאה תישאר "בטיפול" — ניתן לפתוח ביקור נוסף לאחר אישור',
-    icon:  RefreshCw,
-    color: 'border-blue-300 bg-blue-50 text-blue-800 hover:border-blue-400',
   },
   {
     id:    'waiting',
@@ -55,17 +43,12 @@ const WAITING_OPTIONS: { id: WaitingFor; label: string }[] = [
   { id: 'waiting_customer',  label: 'ממתין ללקוח' },
 ]
 
-// ── Status outcome mapping ────────────────────────────────────────────────
-
 function resolveTicketStatus(outcome: OutcomeId, waiting?: WaitingFor): TicketStatus {
-  if (outcome === 'resolved')   return 'completed'
-  if (outcome === 'follow_up')  return 'in_progress'
+  if (outcome === 'resolved') return 'completed'
   return waiting ?? 'waiting_equipment'
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
-
-export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeProps) {
+export function VisitOutcome({ ticketId, currentStatus }: VisitOutcomeProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -77,27 +60,15 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
     currentStatus === 'waiting_equipment' ||
     currentStatus === 'waiting_supplier'
   )
-  const [savedOutcome, setSavedOutcome] = useState<OutcomeId | null>(null)
-  const [error,        setError]        = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Already handled — just show result
-  if (done && savedOutcome) {
+  if (done) {
     return (
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+      <div className="bg-card border border-border rounded-xl p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" />
           תוצאת הביקור נשמרה
         </div>
-
-        {savedOutcome === 'follow_up' && (
-          <a
-            href={`/visits/new?ticket=${ticketId}&prev_visit=${visitId}`}
-            className={buttonVariants({ className: 'gap-2 w-full justify-center' })}
-          >
-            <PlusCircle className="h-4 w-4" />
-            פתח ביקור נוסף
-          </a>
-        )}
       </div>
     )
   }
@@ -115,7 +86,6 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
         setError(result.error)
         return
       }
-      setSavedOutcome(selected)
       setDone(true)
       router.refresh()
     })
@@ -123,7 +93,6 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
 
   const canConfirm =
     selected === 'resolved' ||
-    selected === 'follow_up' ||
     (selected === 'waiting' && !!waitingFor)
 
   return (
@@ -133,7 +102,6 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
         בחר תוצאה — הסטטוס של הקריאה יתעדכן אוטומטית
       </p>
 
-      {/* Outcome options */}
       <div className="space-y-2">
         {OUTCOMES.map(({ id, label, desc, icon: Icon, color }) => (
           <div key={id}>
@@ -147,7 +115,6 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
                 selected === id ? color : 'border-border bg-background hover:bg-muted/40'
               )}
             >
-              {/* Radio indicator */}
               <div className={cn(
                 'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5',
                 selected === id ? 'border-current' : 'border-muted-foreground/40'
@@ -171,7 +138,6 @@ export function VisitOutcome({ visitId, ticketId, currentStatus }: VisitOutcomeP
               )}
             </button>
 
-            {/* Waiting sub-options */}
             {id === 'waiting' && selected === 'waiting' && (
               <div className="mr-7 mt-1 space-y-1 pl-2 border-r-2 border-orange-200">
                 {WAITING_OPTIONS.map(opt => (

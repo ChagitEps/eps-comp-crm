@@ -123,6 +123,7 @@ CREATE TABLE visits (
   start_time              timestamptz,
   end_time                timestamptz,
   duration_minutes        int,
+  total_billing_minutes   int DEFAULT 0,
   work_description        text,
   work_cost               numeric(10, 2) DEFAULT 0,
   equipment_cost          numeric(10, 2) DEFAULT 0,
@@ -131,6 +132,22 @@ CREATE TABLE visits (
   notes                   text,
   created_at              timestamptz DEFAULT now(),
   updated_at              timestamptz DEFAULT now()
+);
+
+-- =====================================================
+-- VISIT ATTENDANCES (per-session time logs)
+-- =====================================================
+CREATE TABLE visit_attendances (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+  visit_id         uuid REFERENCES visits(id) ON DELETE CASCADE NOT NULL,
+  work_done        text,
+  internal_notes   text,
+  started_at       timestamptz,
+  ended_at         timestamptz,
+  duration_minutes int,
+  created_at       timestamptz DEFAULT now(),
+  updated_at       timestamptz DEFAULT now()
 );
 
 -- =====================================================
@@ -152,6 +169,7 @@ CREATE TABLE equipment (
   installation_date       date,
   warranty_start          date,
   warranty_end            date,
+  quantity                integer NOT NULL DEFAULT 1 CHECK (quantity >= 1),
   status                  text DEFAULT 'at_customer' CHECK (status IN (
                             'in_stock', 'at_customer', 'repair_technician',
                             'repair_lab', 'repair_supplier', 'installed',

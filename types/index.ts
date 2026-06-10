@@ -230,6 +230,7 @@ export interface Visit {
   start_time: string | null
   end_time: string | null
   duration_minutes: number | null
+  total_billing_minutes: number | null
   work_description: string | null
   work_cost: number
   equipment_cost: number
@@ -246,6 +247,19 @@ export interface Visit {
   technician?: Profile
 }
 
+export interface VisitAttendance {
+  id: string
+  tenant_id: string
+  visit_id: string
+  work_done: string | null
+  internal_notes: string | null
+  started_at: string | null
+  ended_at: string | null
+  duration_minutes: number | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Equipment {
   id: string
   tenant_id: string
@@ -260,6 +274,7 @@ export interface Equipment {
   installation_date: string | null
   warranty_start: string | null
   warranty_end: string | null
+  quantity: number
   status: EquipmentStatus
   location_notes: string | null
   notes: string | null
