@@ -555,6 +555,7 @@ CREATE POLICY "ticket_files_storage_insert" ON storage.objects
 CREATE POLICY "ticket_files_storage_delete" ON storage.objects
   FOR DELETE USING (
     bucket_id = 'ticket-files'
+    AND (storage.foldername(name))[1] = get_my_tenant_id()::text
     AND get_my_role() IN ('admin', 'technician_senior')
   );
 
@@ -577,6 +578,7 @@ CREATE POLICY "visit_files_storage_insert" ON storage.objects
 CREATE POLICY "visit_files_storage_delete" ON storage.objects
   FOR DELETE USING (
     bucket_id = 'visit-files'
+    AND (storage.foldername(name))[1] = get_my_tenant_id()::text
     AND get_my_role() IN ('admin', 'technician_senior')
   );
 

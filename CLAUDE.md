@@ -128,6 +128,15 @@ lib/supabase/admin.ts    // createAdminClient() — service role, bypasses RLS
 
 ---
 
+## סוכנים
+הסוכנים שלי נמצאים ב-C:\Users\1\Desktop\חגית\automan\MyAgents\04-Agents\
+בכל שיחה, קראי קודם את roni.md ופעלי לפיו.
+
+## כלל חובה
+בסוף כל שיחה — עדכני את ה-state ב-C:\Users\1\Desktop\חגית\automan\MyAgents\04-Agents\state\
+
+---
+
 ## FK Disambiguation (Critical)
 
 `tickets` has TWO foreign keys to `profiles`:

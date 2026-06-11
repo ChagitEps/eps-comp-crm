@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { getTenantId } from '@/lib/supabase/get-tenant'
+import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
 import type { EquipmentCategory, EquipmentStatus, VisitEquipmentAction } from '@/types'
 
 export interface QuickEquipmentData {
@@ -265,7 +265,9 @@ export async function softDeleteEquipment(
   equipmentId: string,
   customerId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin', 'technician_senior'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
   const { error } = await supabase
     .from('equipment')

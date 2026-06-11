@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getTenantId } from '@/lib/supabase/get-tenant'
+import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
 import type { TicketStatus, TicketUrgency, TicketChannel } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuickEquipmentData } from '@/app/actions/equipment'
@@ -506,7 +506,9 @@ export async function updateTicket(
 }
 
 export async function softDeleteTicket(ticketId: string): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
   const { error } = await supabase
     .from('tickets')

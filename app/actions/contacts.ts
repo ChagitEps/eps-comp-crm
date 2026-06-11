@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { getTenantId } from '@/lib/supabase/get-tenant'
+import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
 
 export interface ContactFormData {
   name: string
@@ -88,7 +88,9 @@ export async function deleteContact(
   contactId: string,
   customerId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
   const { error } = await supabase.from('contacts').delete().eq('id', contactId)
 

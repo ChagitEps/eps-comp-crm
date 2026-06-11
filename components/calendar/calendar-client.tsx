@@ -18,9 +18,7 @@ import type { VisitType, VisitStatus, UserRole } from '@/types'
 import { rescheduleVisit } from '@/app/actions/visits'
 import { VisitDetailModal, type ModalVisit } from './visit-detail-modal'
 
-export interface CalendarVisit extends ModalVisit {
-  // CalendarVisit extends ModalVisit with nothing extra — all fields included
-}
+export type CalendarVisit = ModalVisit
 
 interface Technician {
   id: string
@@ -408,9 +406,9 @@ export function CalendarClient({
 
   return (
     <div className="space-y-4">
-      {view === 'month' && <MonthView />}
-      {view === 'week' && <WeekView />}
-      {view === 'day' && <DayView />}
+      {view === 'month' && MonthView()}
+      {view === 'week' && WeekView()}
+      {view === 'day' && DayView()}
 
       {/* Drag pending indicator */}
       {isPending && (

@@ -30,8 +30,8 @@ export function TicketAttachments({ ticketId, customerId, files, userRole }: Tic
     return uploadTicketFile(ticketId, customerId, formData)
   }
 
-  function handleDelete(fileId: string, storagePath: string) {
-    return deleteTicketFile(fileId, storagePath, ticketId)
+  function handleDelete(fileId: string) {
+    return deleteTicketFile(fileId, ticketId)
   }
 
   return (
@@ -64,7 +64,7 @@ export function TicketAttachments({ ticketId, customerId, files, userRole }: Tic
               bucket="ticket-files"
               userRole={userRole}
               signedUrl={file.signed_url}
-              onDelete={() => handleDelete(file.id, file.file_url)}
+              onDelete={() => handleDelete(file.id)}
             />
           ))}
         </div>

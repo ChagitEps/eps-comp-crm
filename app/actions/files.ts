@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getTenantId } from '@/lib/supabase/get-tenant'
+import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
 
 export interface ActionResult {
   error?: string
@@ -85,11 +85,16 @@ export async function uploadCustomerFile(
   console.log('[uploadCustomerFile] userId:', user?.id ?? 'null')
   if (!user) return { error: 'לא מחובר.' }
 
-  // ── Step 4: admin client + env key ───────────────────────────────────
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  console.log('[uploadCustomerFile] SUPABASE_SERVICE_ROLE_KEY set:', !!serviceKey)
-  console.log('[uploadCustomerFile] key prefix:', serviceKey?.slice(0, 20) ?? 'MISSING')
+  // ── Step 3b: verify the customer belongs to this tenant ───────────────
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('id', customerId)
+    .eq('tenant_id', tenantId)
+    .single()
+  if (!customer) return { error: 'הלקוח לא נמצא.' }
 
+  // ── Step 4: admin client ───────────────────────────────────────────────
   let admin: ReturnType<typeof createAdminClient>
   try {
     admin = createAdminClient()
@@ -200,6 +205,15 @@ export async function uploadTicketFile(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'לא מחובר.' }
 
+  // ── Verify the ticket belongs to this tenant ──────────────────────────
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id')
+    .eq('id', ticketId)
+    .eq('tenant_id', tenantId)
+    .single()
+  if (!ticket) return { error: 'הקריאה לא נמצאה.' }
+
   const admin = createAdminClient()
   await ensureBucket('ticket-files')
 
@@ -248,20 +262,24 @@ export async function uploadTicketFile(
 
 export async function deleteCustomerFile(
   fileId: string,
-  storagePath: string,
   customerId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'לא מחובר.' }
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return { error: 'רק מנהל יכול למחוק קבצים.' }
+  // RLS scopes this lookup to the caller's tenant — confirms file ownership
+  const { data: fileRow } = await supabase
+    .from('customer_files')
+    .select('file_url')
+    .eq('id', fileId)
+    .single()
+  if (!fileRow) return { error: 'הקובץ לא נמצא.' }
 
   const admin = createAdminClient()
   const [{ error: dbError }, { error: storageError }] = await Promise.all([
     supabase.from('customer_files').delete().eq('id', fileId),
-    admin.storage.from('customer-files').remove([storagePath]),
+    admin.storage.from('customer-files').remove([fileRow.file_url]),
   ])
 
   if (dbError || storageError) {
@@ -275,20 +293,24 @@ export async function deleteCustomerFile(
 
 export async function deleteTicketFile(
   fileId: string,
-  storagePath: string,
   ticketId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'לא מחובר.' }
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return { error: 'רק מנהל יכול למחוק קבצים.' }
+  // RLS scopes this lookup to the caller's tenant — confirms file ownership
+  const { data: fileRow } = await supabase
+    .from('ticket_files')
+    .select('file_url')
+    .eq('id', fileId)
+    .single()
+  if (!fileRow) return { error: 'הקובץ לא נמצא.' }
 
   const admin = createAdminClient()
   const [{ error: dbError }, { error: storageError }] = await Promise.all([
     supabase.from('ticket_files').delete().eq('id', fileId),
-    admin.storage.from('ticket-files').remove([storagePath]),
+    admin.storage.from('ticket-files').remove([fileRow.file_url]),
   ])
 
   if (dbError || storageError) {

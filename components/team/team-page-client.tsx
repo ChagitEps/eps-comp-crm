@@ -39,7 +39,7 @@ export function TeamPageClient({ technicians, currentUserId }: TeamPageClientPro
         <TechnicianList technicians={active} currentUserId={currentUserId} />
       ) : (
         <div className="text-center py-12 border border-dashed border-border rounded-xl">
-          <p className="text-sm text-muted-foreground">אין חברי צוות. לחץ "הזמן טכנאי" להוסיף.</p>
+          <p className="text-sm text-muted-foreground">אין חברי צוות. לחץ &quot;הזמן טכנאי&quot; להוסיף.</p>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -37,17 +37,13 @@ function LoginForm() {
 
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error,    setError]    = useState<string | null>(null)
+  // Pick up error from OAuth callback redirect (read once on initial mount)
+  const [error,    setError]    = useState<string | null>(() => {
+    const errCode = searchParams.get('error')
+    return errCode ? (ERROR_MESSAGES[errCode] ?? `שגיאה: ${errCode}`) : null
+  })
   const [loading,  setLoading]  = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
-
-  // Pick up error from OAuth callback redirect
-  useEffect(() => {
-    const errCode = searchParams.get('error')
-    if (errCode) {
-      setError(ERROR_MESSAGES[errCode] ?? `שגיאה: ${errCode}`)
-    }
-  }, [searchParams])
 
   // ── Email + password login ─────────────────────────────────────────
   async function handleLogin(e: React.FormEvent) {

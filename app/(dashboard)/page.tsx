@@ -18,13 +18,14 @@ import { cn } from '@/lib/utils'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
+  const now = new Date()
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const todayEnd = new Date()
   todayEnd.setHours(23, 59, 59, 999)
 
   // SLA threshold: tickets open more than 3 days with no update
-  const slaThreshold = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+  const slaThreshold = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
 
   const [
     { count: openTickets },
@@ -91,7 +92,7 @@ export default async function DashboardPage() {
       .select('id, equipment_type, model, warranty_end, customer:customers(id, name, business_name)')
       .eq('is_deleted', false)
       .gte('warranty_end', new Date().toISOString().split('T')[0])
-      .lte('warranty_end', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .lte('warranty_end', new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
       .order('warranty_end')
       .limit(5),
 
@@ -140,7 +141,6 @@ export default async function DashboardPage() {
     },
   ]
 
-  const now = new Date()
   const hour = now.getHours()
   const greeting =
     hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב'
@@ -307,7 +307,7 @@ export default async function DashboardPage() {
                   | { id: string; name: string; business_name: string | null }
                   | null
                 const daysLeft = item.warranty_end
-                  ? Math.ceil((new Date(item.warranty_end).getTime() - Date.now()) / 86400000)
+                  ? Math.ceil((new Date(item.warranty_end).getTime() - now.getTime()) / 86400000)
                   : null
                 return (
                   <div key={item.id} className="flex items-center justify-between px-4 py-2.5">

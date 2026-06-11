@@ -30,8 +30,8 @@ export function CustomerDocuments({ customerId, files, userRole }: CustomerDocum
     return uploadCustomerFile(customerId, formData)
   }
 
-  function handleDelete(fileId: string, storagePath: string) {
-    return deleteCustomerFile(fileId, storagePath, customerId)
+  function handleDelete(fileId: string) {
+    return deleteCustomerFile(fileId, customerId)
   }
 
   return (
@@ -62,7 +62,7 @@ export function CustomerDocuments({ customerId, files, userRole }: CustomerDocum
               bucket="customer-files"
               userRole={userRole}
               signedUrl={file.signed_url}
-              onDelete={() => handleDelete(file.id, file.file_url)}
+              onDelete={() => handleDelete(file.id)}
             />
           ))}
         </div>

@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { getTenantId } from '@/lib/supabase/get-tenant'
+import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
 import type { CustomerType, CustomerStatus, BillingModel } from '@/types'
 
 export interface CustomerFormData {
@@ -198,7 +198,9 @@ export async function updateCustomer(id: string, data: CustomerFormData): Promis
 }
 
 export async function softDeleteCustomer(id: string): Promise<ActionResult> {
-  const supabase = await createClient()
+  const ctx = await requireRole(['admin'])
+  if (!ctx) return { error: 'אין הרשאה לבצע פעולה זו.' }
+  const { supabase } = ctx
 
   const { error } = await supabase
     .from('customers')

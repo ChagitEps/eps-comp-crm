@@ -70,7 +70,7 @@ export function AttendanceTimeline({ visitId, attendances, userRole }: Attendanc
         <div className="rounded-xl border border-dashed border-border p-6 text-center">
           <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">עדיין אין דיווחי הגעה</p>
-          <p className="text-xs text-muted-foreground mt-0.5">לחץ על "הגעה חדשה" כדי להתחיל</p>
+          <p className="text-xs text-muted-foreground mt-0.5">לחץ על &quot;הגעה חדשה&quot; כדי להתחיל</p>
         </div>
       ) : (
         <div className="space-y-2">

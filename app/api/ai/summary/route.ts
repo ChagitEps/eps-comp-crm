@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'visitId ו-freeText נדרשים' }, { status: 400 })
     }
 
+    if (freeText.length > 5000) {
+      return NextResponse.json({ error: 'הטקסט החופשי ארוך מדי (מקסימום 5000 תווים)' }, { status: 400 })
+    }
+
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your-openai-api-key-here') {
       return NextResponse.json({ error: 'OPENAI_API_KEY לא מוגדר. הוסיפי את המפתח ל-.env.local' }, { status: 500 })
     }

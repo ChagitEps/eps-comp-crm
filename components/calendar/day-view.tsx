@@ -65,7 +65,7 @@ export function DayView({ date, visits }: DayViewProps) {
         <div className="text-center py-16 border-2 border-dashed border-border rounded-xl text-muted-foreground">
           <Wrench className="h-10 w-10 mx-auto mb-3 opacity-20" />
           <p className="text-sm font-medium">אין ביקורים ביום זה</p>
-          <p className="text-xs mt-1">לחץ "ביקור חדש" כדי לתזמן ביקור</p>
+          <p className="text-xs mt-1">לחץ &quot;ביקור חדש&quot; כדי לתזמן ביקור</p>
         </div>
       )}
 

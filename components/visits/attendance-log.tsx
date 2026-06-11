@@ -155,7 +155,7 @@ export function AttendanceLog({ attendance, index, userRole }: AttendanceLogProp
       {/* State-specific content */}
       {isEmpty && (
         <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-sm text-muted-foreground">לחץ "התחל" כדי להתחיל לתעד הגעה זו</p>
+          <p className="text-sm text-muted-foreground">לחץ &quot;התחל&quot; כדי להתחיל לתעד הגעה זו</p>
           <Button
             size="sm"
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
