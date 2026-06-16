@@ -16,6 +16,7 @@ import {
   UserCog,
   Package,
   ReceiptText,
+  Layers,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -25,11 +26,12 @@ import type { Profile } from '@/types'
 // ── Nav definitions ───────────────────────────────────────────────────────
 
 const MAIN_NAV = [
-  { href: '/',          label: 'לוח בקרה',  icon: LayoutDashboard },
-  { href: '/customers', label: 'לקוחות',    icon: Users },
-  { href: '/tickets',   label: 'קריאות',    icon: TicketIcon },
-  { href: '/visits',    label: 'ביקורים',   icon: Wrench },
-  { href: '/calendar',  label: 'יומן',      icon: CalendarDays },
+  { href: '/',            label: 'לוח בקרה',  icon: LayoutDashboard },
+  { href: '/customers',   label: 'לקוחות',    icon: Users },
+  { href: '/tickets',     label: 'קריאות',    icon: TicketIcon },
+  { href: '/visits',      label: 'ביקורים',   icon: Wrench },
+  { href: '/categories',  label: 'קטגוריות',  icon: Layers },
+  { href: '/calendar',    label: 'יומן',      icon: CalendarDays },
 ]
 
 const ADMIN_NAV = [

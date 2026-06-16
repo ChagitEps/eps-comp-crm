@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantId } from '@/lib/supabase/get-tenant'
 import { finalizeVisitBilling } from '@/app/actions/billing'
 import { recalculateVisitTotals } from '@/app/actions/visit-attendances'
-import type { VisitType, VisitStatus } from '@/types'
+import { updateTicketStatus } from '@/app/actions/tickets'
+import type { VisitType, VisitStatus, TicketStatus } from '@/types'
 
 export interface SelectedWarehouseItem {
   warehouse_item_id: string
@@ -277,6 +278,62 @@ export async function deleteVisit(visitId: string): Promise<ActionResult> {
   if (ticketId) revalidatePath(`/tickets/${ticketId}`)
   revalidatePath('/finance')
 
+  return {}
+}
+
+// ── Close a visit and update the linked ticket in one step ───────────────
+// outcome: 'resolved' | 'follow_up' | 'waiting_equipment' | 'waiting_supplier' | 'waiting_customer'
+export async function closeVisitWithOutcome(
+  visitId: string,
+  ticketId: string,
+  outcome: 'resolved' | 'follow_up' | 'waiting_equipment' | 'waiting_supplier' | 'waiting_customer',
+  followUpScheduledAt?: string | null
+): Promise<ActionResult> {
+  const supabase  = await createClient()
+  const tenantId  = await getTenantId()
+  if (!tenantId) return { error: 'שגיאה בזיהוי הארגון.' }
+
+  // 1. Mark visit as completed (reuses billing finalization inside updateVisitStatus)
+  const visitResult = await updateVisitStatus(visitId, 'completed')
+  if (visitResult.error) return visitResult
+
+  // 2. Map outcome → ticket status
+  const ticketStatus: TicketStatus =
+    outcome === 'resolved'           ? 'completed'          :
+    outcome === 'follow_up'          ? 'in_progress'        :
+    outcome === 'waiting_equipment'  ? 'waiting_equipment'  :
+    outcome === 'waiting_supplier'   ? 'waiting_supplier'   :
+                                       'waiting_customer'
+
+  const ticketResult = await updateTicketStatus(ticketId, ticketStatus)
+  if (ticketResult.error) return ticketResult
+
+  // 3. If follow-up with a date — create a new scheduled visit
+  if (outcome === 'follow_up' && followUpScheduledAt) {
+    const { data: visit } = await supabase
+      .from('visits')
+      .select('technician_id, visit_type')
+      .eq('id', visitId)
+      .single()
+
+    if (visit) {
+      await supabase.from('visits').insert({
+        tenant_id:      tenantId,
+        ticket_id:      ticketId,
+        technician_id:  visit.technician_id,
+        visit_type:     visit.visit_type,
+        status:         'scheduled',
+        start_time:     followUpScheduledAt,
+        equipment_cost: 0,
+        total_cost:     0,
+      })
+    }
+  }
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath(`/tickets/${ticketId}`)
+  revalidatePath('/visits')
+  revalidatePath('/categories')
   return {}
 }
 

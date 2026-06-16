@@ -99,6 +99,8 @@ All roles in `types/index.ts` with `USER_ROLE_LABELS` and `USER_ROLE_COLORS`.
 | 012 | notifications table |
 | 013 | vat_id on customers (ח.פ / ת.ז for iCount invoices) |
 | 014 | business_name NOT NULL, name nullable — company is the B2B anchor |
+| 018 | per sub-visit (visit_attendances) department field + ticket_orders + ticket_activities |
+| 019 | ticket_orders: attendance_id/quantity/estimated_price/notes; visit_attendances: follow_up_needed/follow_up_scheduled_at |
 
 ---
 

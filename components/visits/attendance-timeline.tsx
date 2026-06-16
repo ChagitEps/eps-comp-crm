@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button'
 import { AttendanceLog } from '@/components/visits/attendance-log'
 import { createAttendance } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
-import type { VisitAttendance, UserRole } from '@/types'
+import type { VisitAttendance, UserRole, TicketOrder } from '@/types'
 
 interface AttendanceTimelineProps {
   visitId: string
   attendances: VisitAttendance[]
   userRole: UserRole
+  ticketId?: string | null
+  orders?: TicketOrder[]
 }
 
 function formatTotalDuration(minutes: number): string {
@@ -23,7 +25,13 @@ function formatTotalDuration(minutes: number): string {
   return `${h}:${String(m).padStart(2, '0')} שע'`
 }
 
-export function AttendanceTimeline({ visitId, attendances, userRole }: AttendanceTimelineProps) {
+export function AttendanceTimeline({
+  visitId,
+  attendances,
+  userRole,
+  ticketId,
+  orders = [],
+}: AttendanceTimelineProps) {
   const [isPending, startTransition] = useTransition()
 
   const totalMinutes = attendances.reduce((sum, a) => sum + (a.duration_minutes ?? 0), 0)
@@ -80,6 +88,8 @@ export function AttendanceTimeline({ visitId, attendances, userRole }: Attendanc
               attendance={attendance}
               index={i + 1}
               userRole={userRole}
+              ticketId={ticketId ?? null}
+              orders={orders.filter(o => o.attendance_id === attendance.id)}
             />
           ))}
         </div>

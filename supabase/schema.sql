@@ -138,16 +138,20 @@ CREATE TABLE visits (
 -- VISIT ATTENDANCES (per-session time logs)
 -- =====================================================
 CREATE TABLE visit_attendances (
-  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id        uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
-  visit_id         uuid REFERENCES visits(id) ON DELETE CASCADE NOT NULL,
-  work_done        text,
-  internal_notes   text,
-  started_at       timestamptz,
-  ended_at         timestamptz,
-  duration_minutes int,
-  created_at       timestamptz DEFAULT now(),
-  updated_at       timestamptz DEFAULT now()
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id          uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+  visit_id           uuid REFERENCES visits(id) ON DELETE CASCADE NOT NULL,
+  work_done          text,
+  internal_notes     text,
+  started_at         timestamptz,
+  ended_at           timestamptz,
+  duration_minutes   int,
+  current_department    text NOT NULL DEFAULT 'technician' CHECK (current_department IN (
+                         'quote', 'order', 'lab', 'delivery', 'technician', 'billing')),
+  follow_up_needed      boolean NOT NULL DEFAULT false,
+  follow_up_scheduled_at timestamptz NULL,
+  created_at            timestamptz DEFAULT now(),
+  updated_at            timestamptz DEFAULT now()
 );
 
 -- =====================================================
@@ -310,6 +314,41 @@ CREATE TABLE audit_logs (
 );
 
 -- =====================================================
+-- TICKET ORDERS (order/lab department item tracking)
+-- =====================================================
+CREATE TABLE ticket_orders (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+  ticket_id       uuid REFERENCES tickets(id) ON DELETE CASCADE NOT NULL,
+  attendance_id   uuid REFERENCES visit_attendances(id) ON DELETE SET NULL,
+  item_name       text NOT NULL,
+  supplier        text,
+  model           text,
+  quantity        integer NOT NULL DEFAULT 1,
+  estimated_price numeric(10,2) NULL,
+  notes           text NULL,
+  order_status    text NOT NULL DEFAULT 'pending' CHECK (order_status IN (
+                    'pending', 'ordered', 'arrived_at_lab', 'installed', 'cancelled')),
+  created_at      timestamptz DEFAULT now(),
+  updated_at      timestamptz DEFAULT now()
+);
+
+-- =====================================================
+-- TICKET ACTIVITIES (immutable audit log / shared timeline)
+-- =====================================================
+CREATE TABLE ticket_activities (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+  ticket_id   uuid REFERENCES tickets(id) ON DELETE CASCADE NOT NULL,
+  user_id     uuid REFERENCES profiles(id),
+  action_type text NOT NULL CHECK (action_type IN (
+                'department_change', 'status_change', 'order_created', 'order_status_update')),
+  description text NOT NULL,
+  metadata    jsonb,
+  created_at  timestamptz DEFAULT now()
+);
+
+-- =====================================================
 -- INDEXES
 -- =====================================================
 CREATE INDEX idx_profiles_tenant    ON profiles(tenant_id);
@@ -323,6 +362,9 @@ CREATE INDEX idx_tickets_deleted    ON tickets(is_deleted);
 CREATE INDEX idx_visits_ticket      ON visits(ticket_id);
 CREATE INDEX idx_visits_technician  ON visits(technician_id);
 CREATE INDEX idx_visits_start       ON visits(start_time);
+CREATE INDEX idx_visit_attendances_department ON visit_attendances(current_department);
+CREATE INDEX idx_ticket_orders_attendance    ON ticket_orders(attendance_id) WHERE attendance_id IS NOT NULL;
+CREATE INDEX idx_visit_attendances_followup  ON visit_attendances(follow_up_needed) WHERE follow_up_needed = true;
 CREATE INDEX idx_equipment_customer ON equipment(customer_id);
 CREATE INDEX idx_equipment_tenant   ON equipment(tenant_id);
 CREATE INDEX idx_equipment_deleted  ON equipment(is_deleted);
@@ -337,6 +379,9 @@ CREATE INDEX idx_ticket_files       ON ticket_files(ticket_id);
 CREATE INDEX idx_visit_files        ON visit_files(visit_id);
 CREATE INDEX idx_audit_tenant       ON audit_logs(tenant_id);
 CREATE INDEX idx_audit_entity       ON audit_logs(entity_type, entity_id);
+CREATE INDEX idx_ticket_orders_ticket    ON ticket_orders(ticket_id);
+CREATE INDEX idx_ticket_orders_tenant    ON ticket_orders(tenant_id);
+CREATE INDEX idx_ticket_activities_ticket ON ticket_activities(ticket_id, created_at);
 
 -- =====================================================
 -- UPDATED_AT TRIGGER FUNCTION
@@ -377,6 +422,10 @@ CREATE TRIGGER trg_tasks_updated_at
   BEFORE UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+CREATE TRIGGER trg_ticket_orders_updated_at
+  BEFORE UPDATE ON ticket_orders
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- =====================================================
 -- AUTO-CREATE PROFILE ON SIGNUP
 -- =====================================================
@@ -406,6 +455,8 @@ ALTER TABLE tasks            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ticket_files     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE visit_files      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_orders     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_activities ENABLE ROW LEVEL SECURITY;
 
 -- Helper function: get current user's tenant_id
 CREATE OR REPLACE FUNCTION get_my_tenant_id()
@@ -516,6 +567,17 @@ CREATE POLICY "audit_admin" ON audit_logs
     tenant_id = get_my_tenant_id()
     AND get_my_role() = 'admin'
   );
+
+-- ---- TICKET ORDERS ----
+CREATE POLICY "ticket_orders_tenant" ON ticket_orders
+  FOR ALL USING (tenant_id = get_my_tenant_id());
+
+-- ---- TICKET ACTIVITIES (immutable: select + insert only) ----
+CREATE POLICY "ticket_activities_select" ON ticket_activities
+  FOR SELECT USING (tenant_id = get_my_tenant_id());
+
+CREATE POLICY "ticket_activities_insert" ON ticket_activities
+  FOR INSERT WITH CHECK (tenant_id = get_my_tenant_id());
 
 -- =====================================================
 -- SUPABASE STORAGE BUCKETS

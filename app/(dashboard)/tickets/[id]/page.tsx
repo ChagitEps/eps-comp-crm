@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buttonVariants } from '@/components/ui/button'
 import { TicketStatusSelect } from '@/components/tickets/ticket-status-select'
+import { TicketOrdersCard } from '@/components/tickets/ticket-orders-card'
+import { TicketTimeline } from '@/components/tickets/ticket-timeline'
 import { DeleteTicketButton } from '@/components/tickets/delete-ticket-button'
 import { TicketEquipmentSelector } from '@/components/equipment/ticket-equipment-selector'
 import { TicketAttachments } from '@/components/files/ticket-attachments'
@@ -17,7 +19,16 @@ import {
   VISIT_STATUS_LABELS,
   VISIT_STATUS_COLORS,
 } from '@/types'
-import type { TicketStatus, TicketUrgency, VisitStatus, UserRole, Equipment } from '@/types'
+import type {
+  TicketStatus,
+  TicketUrgency,
+  VisitStatus,
+  UserRole,
+  Equipment,
+  TicketOrder,
+  TicketActivity,
+  VisitAttendance,
+} from '@/types'
 import { cn } from '@/lib/utils'
 
 interface PageProps {
@@ -54,12 +65,15 @@ export default async function TicketDetailPage({ params }: PageProps) {
     : { data: null }
   const userRole: UserRole = (profile?.role as UserRole) ?? 'technician_junior'
 
-  // Step 2: fetch visits, linked equipment, customer equipment, and ticket files in parallel
+  // Step 2: fetch visits, linked equipment, customer equipment, ticket files,
+  // orders, and activity log in parallel
   const [
     { data: visits },
     { data: linkedEquipment },
     { data: customerEquipment },
     { data: rawTicketFiles },
+    { data: orders },
+    { data: activities },
   ] = await Promise.all([
     supabase
       .from('visits')
@@ -83,7 +97,26 @@ export default async function TicketDetailPage({ params }: PageProps) {
       .select('*, uploader:uploaded_by(full_name)')
       .eq('ticket_id', id)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('ticket_orders')
+      .select('*')
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('ticket_activities')
+      .select('*, user:user_id(full_name)')
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: false }),
   ])
+
+  // Step 3: fetch attendance records for all visits linked to this ticket
+  const visitIds = (visits ?? []).map((v) => v.id)
+  const { data: attendances } = visitIds.length > 0
+    ? await supabase
+        .from('visit_attendances')
+        .select('*')
+        .in('visit_id', visitIds)
+    : { data: [] }
 
   // Generate signed URLs for image previews
   const ticketFiles = await Promise.all(
@@ -164,9 +197,11 @@ export default async function TicketDetailPage({ params }: PageProps) {
         </div>
 
         {/* Status selector */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">סטטוס:</span>
-          <TicketStatusSelect ticketId={id} currentStatus={ticket.status as TicketStatus} />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">סטטוס:</span>
+            <TicketStatusSelect ticketId={id} currentStatus={ticket.status as TicketStatus} />
+          </div>
         </div>
 
         {/* Meta row */}
@@ -290,6 +325,18 @@ export default async function TicketDetailPage({ params }: PageProps) {
             })}
           </div>
         )}
+      </div>
+
+      {/* Orders */}
+      <TicketOrdersCard ticketId={id} orders={(orders ?? []) as TicketOrder[]} />
+
+      {/* Unified activity timeline */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold">היסטוריית קריאה</h2>
+        <TicketTimeline
+          attendances={(attendances ?? []) as VisitAttendance[]}
+          activities={(activities ?? []) as TicketActivity[]}
+        />
       </div>
 
       {/* Attachments */}

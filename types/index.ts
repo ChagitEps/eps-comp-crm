@@ -1,3 +1,5 @@
+import { ArrowRightLeft, RefreshCw, PackagePlus, PackageCheck, type LucideIcon } from 'lucide-react'
+
 export type UserRole = 'admin' | 'technician_senior' | 'technician_junior' | 'accountant'
 
 export type CustomerType =
@@ -26,6 +28,27 @@ export type TicketStatus =
   | 'cancelled'
 
 export type TicketUrgency = 'low' | 'medium' | 'high' | 'critical'
+
+export type TicketDepartment =
+  | 'quote'
+  | 'order'
+  | 'lab'
+  | 'delivery'
+  | 'technician'
+  | 'billing'
+
+export type OrderStatus =
+  | 'pending'
+  | 'ordered'
+  | 'arrived_at_lab'
+  | 'installed'
+  | 'cancelled'
+
+export type TicketActivityActionType =
+  | 'department_change'
+  | 'status_change'
+  | 'order_created'
+  | 'order_status_update'
 
 export type TicketChannel =
   | 'website'
@@ -220,6 +243,35 @@ export interface Ticket {
   assigned_technician?: Profile
 }
 
+export interface TicketOrder {
+  id: string
+  tenant_id: string
+  ticket_id: string
+  attendance_id: string | null
+  item_name: string
+  supplier: string | null
+  model: string | null
+  quantity: number
+  estimated_price: number | null
+  notes: string | null
+  order_status: OrderStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface TicketActivity {
+  id: string
+  tenant_id: string
+  ticket_id: string
+  user_id: string | null
+  action_type: TicketActivityActionType
+  description: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+  // relations
+  user?: { full_name: string }
+}
+
 export interface Visit {
   id: string
   tenant_id: string
@@ -256,6 +308,9 @@ export interface VisitAttendance {
   started_at: string | null
   ended_at: string | null
   duration_minutes: number | null
+  current_department: TicketDepartment
+  follow_up_needed: boolean
+  follow_up_scheduled_at: string | null
   created_at: string
   updated_at: string
 }
@@ -455,6 +510,47 @@ export const TICKET_STATUS_COLORS: Record<TicketStatus, string> = {
   waiting_supplier: 'bg-pink-100 text-pink-800',
   completed: 'bg-green-100 text-green-800',
   cancelled: 'bg-gray-100 text-gray-500',
+}
+
+export const CURRENT_DEPARTMENT_LABELS: Record<TicketDepartment, string> = {
+  quote: 'הצעת מחיר',
+  order: 'הזמנה',
+  lab: 'מעבדה',
+  delivery: 'משלוח',
+  technician: 'טכנאי',
+  billing: 'חשבונות',
+}
+
+export const CURRENT_DEPARTMENT_COLORS: Record<TicketDepartment, string> = {
+  quote: 'bg-indigo-100 text-indigo-800',
+  order: 'bg-blue-100 text-blue-800',
+  lab: 'bg-purple-100 text-purple-800',
+  delivery: 'bg-amber-100 text-amber-800',
+  technician: 'bg-green-100 text-green-800',
+  billing: 'bg-teal-100 text-teal-800',
+}
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: 'ממתין',
+  ordered: 'הוזמן',
+  arrived_at_lab: 'הגיע למעבדה',
+  installed: 'הותקן',
+  cancelled: 'בוטל',
+}
+
+export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
+  pending: 'bg-gray-100 text-gray-600',
+  ordered: 'bg-blue-100 text-blue-800',
+  arrived_at_lab: 'bg-purple-100 text-purple-800',
+  installed: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-700',
+}
+
+export const TICKET_ACTIVITY_ICONS: Record<TicketActivityActionType, LucideIcon> = {
+  department_change: ArrowRightLeft,
+  status_change: RefreshCw,
+  order_created: PackagePlus,
+  order_status_update: PackageCheck,
 }
 
 export const VISIT_TYPE_LABELS: Record<VisitType, string> = {

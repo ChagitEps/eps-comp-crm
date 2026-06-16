@@ -1,14 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, Edit, User, Monitor } from 'lucide-react'
+import { ChevronRight, User, Monitor } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { buttonVariants } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { GoogleSyncButton } from '@/components/visits/google-sync-button'
 import { AiSummaryPanel } from '@/components/visits/ai-summary-panel'
 import { PreInvoiceVerification } from '@/components/visits/pre-invoice-verification'
 import { DeleteVisitButton } from '@/components/visits/delete-visit-button'
 import { VisitOutcome } from '@/components/visits/visit-outcome'
+import { CloseVisitDialog } from '@/components/visits/close-visit-dialog'
 import { AttendanceTimeline } from '@/components/visits/attendance-timeline'
 import { VisitStatusSelect } from '@/components/visits/visit-status-select'
 import {
@@ -24,9 +24,9 @@ import type {
   Equipment,
   VisitEquipmentAction,
   VisitAttendance,
+  TicketOrder,
 } from '@/types'
 import { VisitEquipmentSelector } from '@/components/equipment/visit-equipment-selector'
-import { cn } from '@/lib/utils'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -65,11 +65,12 @@ export default async function VisitDetailPage({ params }: PageProps) {
   const technician = visit.technician as { full_name: string; hourly_rate: number | null } | null
   const customer   = ticket?.customer ?? null
 
-  // Fetch attendance logs + equipment in parallel
+  // Fetch attendance logs, equipment, and ticket orders in parallel
   const [
     { data: attendancesRaw },
     { data: linkedEquipmentRaw },
     { data: customerEquipment },
+    { data: ticketOrdersRaw },
   ] = await Promise.all([
     supabase
       .from('visit_attendances')
@@ -87,6 +88,13 @@ export default async function VisitDetailPage({ params }: PageProps) {
           .eq('customer_id', customer.id)
           .eq('is_deleted', false)
           .order('equipment_type')
+      : Promise.resolve({ data: [] }),
+    ticket?.id
+      ? supabase
+          .from('ticket_orders')
+          .select('*')
+          .eq('ticket_id', ticket.id)
+          .order('created_at', { ascending: true })
       : Promise.resolve({ data: [] }),
   ])
 
@@ -160,13 +168,6 @@ export default async function VisitDetailPage({ params }: PageProps) {
               isConnected={isGoogleConnected}
               connectUrl={googleConnectUrl}
             />
-            <Link
-              href={`/visits/${id}/edit`}
-              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-            >
-              <Edit className="h-3.5 w-3.5" />
-              עריכה
-            </Link>
             {userRole === 'admin' && (
               <DeleteVisitButton visitId={id} ticketId={ticket?.id} />
             )}
@@ -195,6 +196,8 @@ export default async function VisitDetailPage({ params }: PageProps) {
           visitId={id}
           attendances={attendances}
           userRole={userRole}
+          ticketId={ticket?.id ?? null}
+          orders={(ticketOrdersRaw ?? []) as TicketOrder[]}
         />
       </div>
 
@@ -231,6 +234,13 @@ export default async function VisitDetailPage({ params }: PageProps) {
       {/* AI Summary */}
       {ticket?.id && (
         <AiSummaryPanel visitId={id} ticketId={ticket.id} />
+      )}
+
+      {/* Close visit button — shown only when not yet completed */}
+      {visit.status !== 'completed' && ticket?.id && (
+        <div className="flex justify-end">
+          <CloseVisitDialog visitId={id} ticketId={ticket.id} />
+        </div>
       )}
 
       {/* Costs */}

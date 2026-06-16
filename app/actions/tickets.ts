@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getTenantId, requireRole } from '@/lib/supabase/get-tenant'
+import { getFullName, logTicketActivity } from '@/lib/ticket-activity'
 import type { TicketStatus, TicketUrgency, TicketChannel } from '@/types'
+import { TICKET_STATUS_LABELS } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuickEquipmentData } from '@/app/actions/equipment'
 
@@ -466,6 +468,14 @@ export async function updateTicketStatus(
   status: TicketStatus
 ): Promise<ActionResult> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'לא מחובר.' }
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('status')
+    .eq('id', ticketId)
+    .single()
 
   const { error } = await supabase
     .from('tickets')
@@ -473,6 +483,21 @@ export async function updateTicketStatus(
     .eq('id', ticketId)
 
   if (error) return { error: 'שגיאה בעדכון הסטטוס.' }
+
+  if (ticket && ticket.status !== status) {
+    const tenantId = await getTenantId()
+    if (tenantId) {
+      const fullName = await getFullName(supabase, user.id)
+      await logTicketActivity(supabase, {
+        tenantId,
+        ticketId,
+        userId: user.id,
+        actionType: 'status_change',
+        description: `${fullName} שינה/תה סטטוס מ-${TICKET_STATUS_LABELS[ticket.status as TicketStatus]} ל-${TICKET_STATUS_LABELS[status]}`,
+        metadata: { from: ticket.status, to: status },
+      })
+    }
+  }
 
   revalidatePath(`/tickets/${ticketId}`)
   revalidatePath('/tickets')

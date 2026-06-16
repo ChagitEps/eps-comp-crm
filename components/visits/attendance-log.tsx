@@ -1,21 +1,27 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
-import { Play, Square, Pencil, Trash2, Clock } from 'lucide-react'
+import { Play, Square, Pencil, Trash2, Clock, Plus, ShoppingCart, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { AttendanceEditDialog } from '@/components/visits/attendance-edit-dialog'
+import { AttendanceDepartmentSelect } from '@/components/visits/attendance-department-select'
+import { AddOrderDialog } from '@/components/tickets/add-order-dialog'
+import { FollowUpDialog } from '@/components/visits/follow-up-dialog'
+import { OrderStatusSelect } from '@/components/tickets/order-status-select'
 import { startAttendance, endAttendance, deleteAttendance, updateAttendanceText } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { VisitAttendance, UserRole } from '@/types'
+import type { VisitAttendance, UserRole, TicketOrder } from '@/types'
 
 interface AttendanceLogProps {
   attendance: VisitAttendance
   index: number
   userRole: UserRole
+  ticketId: string | null
+  orders: TicketOrder[]
 }
 
 function formatDuration(minutes: number): string {
@@ -56,10 +62,12 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   )
 }
 
-export function AttendanceLog({ attendance, index, userRole }: AttendanceLogProps) {
+export function AttendanceLog({ attendance, index, userRole, ticketId, orders }: AttendanceLogProps) {
   const [isPendingStart, startStart] = useTransition()
   const [isPendingEnd, startEnd]     = useTransition()
   const [editOpen, setEditOpen]      = useState(false)
+  const [orderDialogOpen, setOrderDialogOpen]   = useState(false)
+  const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false)
 
   const [workDone, setWorkDone]           = useState(attendance.work_done ?? '')
   const [internalNotes, setInternalNotes] = useState(attendance.internal_notes ?? '')
@@ -69,6 +77,7 @@ export function AttendanceLog({ attendance, index, userRole }: AttendanceLogProp
   const isRunning   = !!attendance.started_at && !attendance.ended_at
   const isCompleted = !!attendance.started_at && !!attendance.ended_at
   const isEmpty     = !attendance.started_at
+  const isOrderDept = attendance.current_department === 'order'
 
   async function handleStart() {
     startStart(async () => {
@@ -120,10 +129,31 @@ export function AttendanceLog({ attendance, index, userRole }: AttendanceLogProp
           <span className="text-sm font-semibold">
             {isCompleted && attendance.started_at ? formatDate(attendance.started_at) : 'הגעה חדשה'}
           </span>
+          <AttendanceDepartmentSelect
+            attendanceId={attendance.id}
+            currentDepartment={attendance.current_department}
+          />
         </div>
 
         {/* Action buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Follow-up button */}
+          <Button
+            variant={attendance.follow_up_needed ? 'default' : 'ghost'}
+            size="sm"
+            className={cn(
+              'h-7 px-2 text-xs gap-1',
+              attendance.follow_up_needed
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+            onClick={() => setFollowUpDialogOpen(true)}
+            title="ביקור המשך"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            {attendance.follow_up_needed ? 'ביקור המשך' : ''}
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
@@ -230,11 +260,84 @@ export function AttendanceLog({ attendance, index, userRole }: AttendanceLogProp
         </div>
       </div>
 
+      {/* Orders section — shown only when department = 'order' */}
+      {isOrderDept && ticketId && (
+        <div className="border-t border-border pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ShoppingCart className="h-3.5 w-3.5" />
+              פריטים להזמנה
+              {orders.length > 0 && <span className="text-foreground">({orders.length})</span>}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-xs gap-1 px-2"
+              onClick={() => setOrderDialogOpen(true)}
+            >
+              <Plus className="h-3 w-3" />
+              הוסף פריט
+            </Button>
+          </div>
+
+          {orders.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-2">
+              אין פריטים עדיין — לחץ &quot;הוסף פריט&quot; כדי להוסיף
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {orders.map(order => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between gap-2 text-xs bg-muted/50 rounded-lg px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium">{order.item_name}</span>
+                    {order.quantity > 1 && (
+                      <span className="text-muted-foreground mr-1.5">×{order.quantity}</span>
+                    )}
+                    {order.supplier && (
+                      <span className="text-muted-foreground mr-1.5">· {order.supplier}</span>
+                    )}
+                    {order.estimated_price != null && (
+                      <span className="text-muted-foreground">· ₪{order.estimated_price}</span>
+                    )}
+                    {order.notes && (
+                      <p className="text-muted-foreground/70 mt-0.5 truncate">{order.notes}</p>
+                    )}
+                  </div>
+                  <OrderStatusSelect
+                    orderId={order.id}
+                    ticketId={ticketId}
+                    currentStatus={order.order_status}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <AttendanceEditDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         attendance={attendance}
         index={index}
+      />
+
+      {ticketId && (
+        <AddOrderDialog
+          open={orderDialogOpen}
+          onOpenChange={setOrderDialogOpen}
+          ticketId={ticketId}
+          attendanceId={attendance.id}
+        />
+      )}
+
+      <FollowUpDialog
+        open={followUpDialogOpen}
+        onOpenChange={setFollowUpDialogOpen}
+        attendanceId={attendance.id}
       />
     </div>
   )
