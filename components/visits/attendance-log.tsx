@@ -15,7 +15,17 @@ import { OrderStatusSelect } from '@/components/tickets/order-status-select'
 import { startAttendance, endAttendance, deleteAttendance, updateAttendanceText } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { VISIT_TYPE_LABELS } from '@/types'
 import type { VisitAttendance, UserRole, TicketOrder, VisitType } from '@/types'
+
+const TYPE_COLORS: Record<string, string> = {
+  computing:      'bg-blue-100 text-blue-700',
+  remote:         'bg-purple-100 text-purple-700',
+  emergency:      'bg-red-100 text-red-700',
+  infrastructure: 'bg-orange-100 text-orange-700',
+  servers:        'bg-slate-100 text-slate-700',
+  lab:            'bg-teal-100 text-teal-700',
+}
 
 interface AttendanceLogProps {
   attendance: VisitAttendance
@@ -135,11 +145,6 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
             attendanceId={attendance.id}
             currentDepartment={attendance.current_department}
           />
-          <AttendanceTypeSelect
-            attendanceId={attendance.id}
-            currentType={attendance.visit_type}
-            defaultType={defaultVisitType}
-          />
         </div>
 
         {/* Action buttons */}
@@ -191,11 +196,17 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
 
       {/* State-specific content */}
       {isEmpty && (
-        <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-sm text-muted-foreground">לחץ &quot;התחל&quot; כדי להתחיל לתעד הגעה זו</p>
+        <div className="flex items-center gap-3 pt-1">
+          <AttendanceTypeSelect
+            attendanceId={attendance.id}
+            currentType={attendance.visit_type}
+            defaultType={defaultVisitType}
+            triggerClassName="h-9 text-sm border flex-1 min-w-0 px-3 bg-background"
+            placeholder="בחר סוג שירות..."
+          />
           <Button
             size="sm"
-            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="gap-1.5 h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
             onClick={handleStart}
             disabled={isPendingStart}
           >
@@ -207,10 +218,15 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
 
       {isRunning && attendance.started_at && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Clock className="h-4 w-4 text-blue-500 animate-pulse shrink-0" />
             <LiveTimer startedAt={attendance.started_at} />
             <span className="text-xs text-muted-foreground">מאז {formatTime(attendance.started_at)}</span>
+            {attendance.visit_type && (
+              <span className={cn('text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
+                {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
+              </span>
+            )}
           </div>
           <Button
             size="sm"
@@ -226,7 +242,7 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
       )}
 
       {isCompleted && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           {attendance.started_at && attendance.ended_at && (
             <span dir="ltr" className="font-mono">
               {formatTime(attendance.started_at)} → {formatTime(attendance.ended_at)}
@@ -236,6 +252,11 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
             <span className="inline-flex items-center gap-1 bg-muted rounded-md px-2 py-0.5 text-xs font-medium text-foreground">
               <Clock className="h-3 w-3" />
               {formatDuration(attendance.duration_minutes)}
+            </span>
+          )}
+          {attendance.visit_type && (
+            <span className={cn('text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
+              {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
             </span>
           )}
         </div>
