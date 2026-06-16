@@ -248,3 +248,24 @@ export async function upsertServiceRate(
   revalidatePath('/settings/team')
   return {}
 }
+
+// ── Update just the base hourly_rate on a technician profile ─────────────
+export async function updateBaseRate(
+  technicianId: string,
+  hourlyRate: number | null
+): Promise<ActionResult> {
+  const admin = await assertAdmin()
+  if (!admin) return { error: 'אין הרשאה לבצע פעולה זו.' }
+
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ hourly_rate: hourlyRate })
+    .eq('id', technicianId)
+
+  if (error) return { error: 'שגיאה בעדכון התעריף.' }
+
+  revalidatePath('/settings/team')
+  return {}
+}

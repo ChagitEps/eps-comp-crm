@@ -3,11 +3,11 @@
 import { useState, useTransition } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { upsertServiceRate } from '@/app/actions/team'
+import { upsertServiceRate, updateBaseRate } from '@/app/actions/team'
 import { VISIT_TYPE_LABELS } from '@/types'
 import type { VisitType, TechnicianServiceRate } from '@/types'
 
-const SERVICE_TYPES: VisitType[] = ['computing', 'remote', 'emergency', 'infrastructure', 'servers', 'lab']
+const SERVICE_TYPES: VisitType[] = ['remote', 'emergency', 'infrastructure', 'servers', 'lab']
 
 interface TechnicianRatesProps {
   technicianId: string
@@ -17,12 +17,22 @@ interface TechnicianRatesProps {
 
 export function TechnicianRates({ technicianId, baseRate, rates }: TechnicianRatesProps) {
   const [open, setOpen] = useState(false)
+  const [baseValue, setBaseValue] = useState(baseRate != null ? String(baseRate) : '')
   const [values, setValues] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {}
     rates.forEach(r => { map[r.visit_type] = String(r.hourly_rate) })
     return map
   })
   const [, startTransition] = useTransition()
+
+  function handleBaseBlur(raw: string) {
+    const num = raw.trim() === '' ? null : parseFloat(raw)
+    if (num === baseRate) return
+    startTransition(async () => {
+      const result = await updateBaseRate(technicianId, num)
+      if (result?.error) toast.error(result.error)
+    })
+  }
 
   function handleBlur(visitType: VisitType, raw: string) {
     const num = raw.trim() === '' ? null : parseFloat(raw)
@@ -43,10 +53,31 @@ export function TechnicianRates({ technicianId, baseRate, rates }: TechnicianRat
       </button>
 
       {open && (
-        <div className="px-4 pb-3 space-y-1.5">
-          <p className="text-xs text-muted-foreground mb-2">
-            תעריף בסיס: {baseRate != null ? `₪${baseRate}/שעה` : 'לא הוגדר'} — ישמש כברירת מחדל אם אין תעריף ספציפי
-          </p>
+        <div className="px-4 pb-4 space-y-2">
+          {/* ביקור פיזי — from profile hourly_rate */}
+          <div className="flex items-center gap-3 py-1.5 border-b border-border pb-2.5 mb-1">
+            <span className="text-xs font-medium w-28 shrink-0">
+              {VISIT_TYPE_LABELS['computing']}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">₪</span>
+              <input
+                type="number"
+                min="0"
+                step="10"
+                placeholder="לא הוגדר"
+                value={baseValue}
+                onChange={e => setBaseValue(e.target.value)}
+                onBlur={e => handleBaseBlur(e.target.value)}
+                className="w-20 border border-border rounded-md px-2 py-1 text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <span className="text-xs text-muted-foreground">/שעה</span>
+            </div>
+            <span className="text-xs text-muted-foreground/60 mr-auto">תעריף בסיס</span>
+          </div>
+
+          {/* שאר הסוגים — מ-technician_service_rates */}
+          <p className="text-xs text-muted-foreground">תעריפים שונים מהבסיס (ריק = כמו ביקור פיזי)</p>
           {SERVICE_TYPES.map(vt => (
             <div key={vt} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-28 shrink-0">

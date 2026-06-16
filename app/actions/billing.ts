@@ -87,7 +87,10 @@ export async function finalizeVisitBilling(
     for (const att of attendances ?? []) {
       const mins = att.duration_minutes ?? 0
       if (mins === 0) continue
-      const rateRow = (serviceRates ?? []).find(r => r.visit_type === att.visit_type)
+      // computing (ביקור פיזי) always uses the base hourly_rate
+      const rateRow = att.visit_type !== 'computing'
+        ? (serviceRates ?? []).find(r => r.visit_type === att.visit_type)
+        : undefined
       const rate = rateRow?.hourly_rate ?? hourlyRate
       workCost += (mins / 60) * rate
     }
