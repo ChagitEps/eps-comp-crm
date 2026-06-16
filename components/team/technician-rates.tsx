@@ -33,10 +33,10 @@ export function TechnicianRates({ technicianId, baseRate, rates }: TechnicianRat
   }
 
   return (
-    <div className="border-t border-border">
+    <div className="border-t border-border mt-auto">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
       >
         <span>תעריפים לפי סוג שירות</span>
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

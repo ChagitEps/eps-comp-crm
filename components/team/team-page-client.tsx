@@ -20,7 +20,7 @@ export function TeamPageClient({ technicians, currentUserId, serviceRates }: Tea
   const inactive = technicians.filter((t) => !t.is_active)
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
