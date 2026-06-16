@@ -353,3 +353,58 @@ export async function scheduleFollowUp(
   if (parentVisit?.ticket_id) revalidatePath(`/tickets/${parentVisit.ticket_id}`)
   return {}
 }
+
+// ── Quote approval ─────────────────────────────────────────────────────────
+
+export async function updateQuoteApproval(
+  attendanceId: string,
+  approved: boolean
+): Promise<AttendanceActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'לא מחובר.' }
+
+  const { data: att, error: fetchErr } = await supabase
+    .from('visit_attendances')
+    .select('visit_id')
+    .eq('id', attendanceId)
+    .single()
+  if (fetchErr || !att) return { error: 'הגעה לא נמצאה.' }
+
+  const { error } = await supabase
+    .from('visit_attendances')
+    .update({ quote_approved: approved })
+    .eq('id', attendanceId)
+  if (error) return { error: 'שגיאה בעדכון אישור הצעה.' }
+
+  revalidatePath(`/visits/${att.visit_id}`)
+  revalidatePath('/categories')
+  return {}
+}
+
+export async function updateQuoteAmount(
+  attendanceId: string,
+  amount: number | null
+): Promise<AttendanceActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'לא מחובר.' }
+
+  const { data: att, error: fetchErr } = await supabase
+    .from('visit_attendances')
+    .select('visit_id')
+    .eq('id', attendanceId)
+    .single()
+  if (fetchErr || !att) return { error: 'הגעה לא נמצאה.' }
+
+  const { error } = await supabase
+    .from('visit_attendances')
+    .update({ quote_amount: amount })
+    .eq('id', attendanceId)
+  if (error) return { error: 'שגיאה בעדכון סכום הצעה.' }
+
+  revalidatePath(`/visits/${att.visit_id}`)
+  revalidatePath('/categories')
+  return {}
+}
+

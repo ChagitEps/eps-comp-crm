@@ -36,6 +36,7 @@ export interface EquipmentFormData {
 export interface ActionResult {
   errors?: Record<string, string>
   error?: string
+  id?: string
 }
 
 function validateEquipment(data: EquipmentFormData): Record<string, string> {
@@ -61,7 +62,7 @@ export async function createEquipment(
   const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
   if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
 
-  const { error } = await supabase.from('equipment').insert({
+  const { data: created, error } = await supabase.from('equipment').insert({
     tenant_id: tenantId,
     customer_id: customerId,
     equipment_type: data.equipment_type.trim(),
@@ -81,12 +82,12 @@ export async function createEquipment(
     anydesk_id: data.anydesk_id.trim() || null,
     teamviewer_id: data.teamviewer_id.trim() || null,
     remote_notes: data.remote_notes.trim() || null,
-  })
+  }).select('id').single()
 
-  if (error) return { error: 'שגיאה בהוספת הציוד.' }
+  if (error || !created) return { error: 'שגיאה בהוספת הציוד.' }
 
   revalidatePath(`/customers/${customerId}`)
-  return {}
+  return { id: created.id }
 }
 
 export async function updateEquipment(
@@ -256,6 +257,65 @@ export async function createEquipmentBatch(
   )
 
   if (error) return { error: 'שגיאה בהוספת הציוד.' }
+
+  revalidatePath(`/customers/${customerId}`)
+  return {}
+}
+
+// ── Link equipment to ticket (used after full-form creation) ─────────────────
+export async function linkEquipmentToTicket(
+  equipmentId: string,
+  ticketId: string
+): Promise<ActionResult> {
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { error } = await supabase.from('ticket_equipment').insert({
+    tenant_id:    tenantId,
+    ticket_id:    ticketId,
+    equipment_id: equipmentId,
+  })
+
+  if (error) return { error: 'הציוד נוצר אך לא הצלחנו לקשר אותו לקריאה.' }
+  revalidatePath(`/tickets/${ticketId}`)
+  return {}
+}
+
+// ── Link equipment to visit ───────────────────────────────────────────────────
+export async function linkEquipmentToVisit(
+  equipmentId: string,
+  visitId: string,
+  action: VisitEquipmentAction
+): Promise<ActionResult> {
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי המשתמש.' }
+
+  const { error } = await supabase.from('visit_equipment').insert({
+    tenant_id:    tenantId,
+    visit_id:     visitId,
+    equipment_id: equipmentId,
+    action,
+  })
+
+  if (error) return { error: 'הציוד נוצר אך לא הצלחנו לקשר אותו לביקור.' }
+  revalidatePath(`/visits/${visitId}`)
+  return {}
+}
+
+// ── Inline status update ──────────────────────────────────────────────────────
+export async function updateEquipmentStatus(
+  equipmentId: string,
+  customerId: string,
+  status: EquipmentStatus
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('equipment')
+    .update({ status })
+    .eq('id', equipmentId)
+
+  if (error) return { error: 'שגיאה בעדכון הסטטוס.' }
 
   revalidatePath(`/customers/${customerId}`)
   return {}

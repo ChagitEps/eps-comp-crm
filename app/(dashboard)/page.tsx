@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { TicketIcon, Wrench, AlertCircle, Clock, Plus, User, AlertTriangle, Package } from 'lucide-react'
+import { TicketIcon, Wrench, AlertCircle, Clock, User, AlertTriangle, Package } from 'lucide-react'
 import Link from 'next/link'
-import { buttonVariants } from '@/components/ui/button'
+import { QuickCreateFab } from '@/components/dashboard/quick-create-fab'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
@@ -10,10 +10,35 @@ import {
   TICKET_STATUS_COLORS,
   TICKET_URGENCY_COLORS,
   TICKET_URGENCY_LABELS,
-  VISIT_TYPE_LABELS,
+  VISIT_STATUS_LABELS,
+  VISIT_STATUS_COLORS,
 } from '@/types'
-import type { TicketStatus, TicketUrgency, VisitType } from '@/types'
+import type { TicketStatus, TicketUrgency, VisitStatus } from '@/types'
 import { cn } from '@/lib/utils'
+
+const GREETINGS = {
+  morning: [
+    (name: string) => `בוקר טוב, ${name}!`,
+    (name: string) => `הי ${name}, יום טוב!`,
+    (name: string) => `שלום ${name}, בוקר מוצלח!`,
+    (name: string) => `יום נהדר מתחיל, ${name}!`,
+    (name: string) => `בוקר אנרגטי, ${name}!`,
+  ],
+  afternoon: [
+    (name: string) => `צהריים טובים, ${name}!`,
+    (name: string) => `שלום ${name}, מה נשמע?`,
+    (name: string) => `המשך יום נעים, ${name}!`,
+    (name: string) => `הי ${name}, יום עמוס?`,
+    (name: string) => `שלום ${name}, איך מתקדם היום?`,
+  ],
+  evening: [
+    (name: string) => `ערב טוב, ${name}!`,
+    (name: string) => `ערב נעים, ${name}!`,
+    (name: string) => `שלום ${name}, ערב טוב!`,
+    (name: string) => `הי ${name}, יום עמוס היה?`,
+    (name: string) => `המשך ערב נעים, ${name}!`,
+  ],
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -24,6 +49,12 @@ export default async function DashboardPage() {
   const todayEnd = new Date()
   todayEnd.setHours(23, 59, 59, 999)
 
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+    : { data: null }
+  const firstName = (profile?.full_name ?? '').split(' ')[0] || 'שלום'
+
   // SLA threshold: tickets open more than 3 days with no update
   const slaThreshold = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -33,7 +64,7 @@ export default async function DashboardPage() {
     { count: unpaidCount },
     { count: slaCount },
     { data: recentTickets },
-    { data: todayVisits },
+    { data: recentVisits },
     { data: expiringWarranty },
     { data: lowStockItems },
   ] = await Promise.all([
@@ -74,17 +105,17 @@ export default async function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(6),
 
-    // Today's visits with details
+    // Active visits (not completed/cancelled)
     supabase
       .from('visits')
       .select(`
-        id, start_time, end_time, visit_type, status,
+        id, start_time, status,
         technician:technician_id(full_name),
-        ticket:tickets(title, ticket_number, customer:customers(name, business_name))
+        ticket:tickets(title, customer:customers(name, business_name))
       `)
-      .gte('start_time', todayStart.toISOString())
-      .lte('start_time', todayEnd.toISOString())
-      .order('start_time'),
+      .not('status', 'in', '("completed","cancelled")')
+      .order('start_time', { ascending: false })
+      .limit(8),
 
     // Equipment with warranty expiring in next 30 days
     supabase
@@ -142,10 +173,11 @@ export default async function DashboardPage() {
   ]
 
   const hour = now.getHours()
-  const greeting =
-    hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב'
+  const greetingPool = hour < 12 ? GREETINGS.morning : hour < 17 ? GREETINGS.afternoon : GREETINGS.evening
+  const greeting = greetingPool[Math.floor(Math.random() * greetingPool.length)](firstName)
 
   return (
+    <>
     <div className="space-y-5">
       {/* Greeting */}
       <div>
@@ -161,7 +193,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {stats.map(({ title, value, icon: Icon, color, bg, href }) => (
           <Link key={title} href={href}>
-            <Card className="hover:border-primary/40 transition-colors cursor-pointer h-full">
+            <Card className="border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer h-full bg-white">
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
                 <div className={`${bg} p-1.5 rounded-lg`}>
@@ -182,69 +214,11 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Today's Visits */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3 space-y-0">
-            <CardTitle className="text-sm font-semibold">ביקורים היום</CardTitle>
-            <Link href="/calendar" className="text-xs text-primary hover:underline">יומן מלא</Link>
-          </CardHeader>
-          <CardContent className="p-0">
-            {!todayVisits || todayVisits.length === 0 ? (
-              <div className="px-5 pb-5">
-                <EmptyState icon={Wrench} title="אין ביקורים היום" />
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {todayVisits.map((visit) => {
-                  const tech = visit.technician as unknown as { full_name: string } | null
-                  const ticket = visit.ticket as unknown as {
-                    title: string;
-                    customer: { name: string; business_name: string | null } | null
-                  } | null
-                  const customer = ticket?.customer
-                  return (
-                    <Link
-                      key={visit.id}
-                      href={`/visits/${visit.id}`}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="shrink-0 text-center w-12">
-                        {visit.start_time && (
-                          <p className="text-xs font-semibold">
-                            {new Date(visit.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {ticket?.title ?? VISIT_TYPE_LABELS[visit.visit_type as VisitType]}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                          {customer && <span>{customer.business_name ?? customer.name}</span>}
-                          {tech && (
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {tech.full_name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Recent Tickets */}
-        <Card>
+        <Card className="border-0 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-3 space-y-0">
             <CardTitle className="text-sm font-semibold">קריאות פתוחות אחרונות</CardTitle>
-            <Link href="/tickets/new" className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}>
-              <Plus className="h-3.5 w-3.5" />
-              קריאה חדשה
-            </Link>
+            <Link href="/tickets" className="text-xs text-primary hover:underline">כל הקריאות</Link>
           </CardHeader>
           <CardContent className="p-0">
             {!recentTickets || recentTickets.length === 0 ? (
@@ -289,11 +263,79 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Recent Visits */}
+        <Card className="border-0 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 bg-white">
+          <CardHeader className="flex flex-row items-center justify-between pb-3 space-y-0">
+            <CardTitle className="text-sm font-semibold">ביקורים אחרונים</CardTitle>
+            <Link href="/visits" className="text-xs text-primary hover:underline">כל הביקורים</Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!recentVisits || recentVisits.length === 0 ? (
+              <div className="px-5 pb-5">
+                <EmptyState icon={Wrench} title="אין ביקורים עדיין" />
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {recentVisits.map((visit) => {
+                  const tech = visit.technician as unknown as { full_name: string } | null
+                  const ticket = visit.ticket as unknown as {
+                    title: string;
+                    customer: { name: string; business_name: string | null } | null
+                  } | null
+                  const customer = ticket?.customer
+                  const isToday = visit.start_time
+                    ? new Date(visit.start_time).toDateString() === now.toDateString()
+                    : false
+                  return (
+                    <Link
+                      key={visit.id}
+                      href={`/visits/${visit.id}`}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="shrink-0 text-center w-14">
+                        {visit.start_time && (
+                          <>
+                            <p className="text-xs font-semibold">
+                              {isToday ? 'היום' : new Date(visit.start_time).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(visit.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {ticket?.title ?? 'ביקור'}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          {customer && <span className="truncate">{customer.business_name ?? customer.name}</span>}
+                          {tech && (
+                            <span className="flex items-center gap-1 shrink-0">
+                              <User className="h-3 w-3" />
+                              {tech.full_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <StatusBadge
+                        label={VISIT_STATUS_LABELS[visit.status as VisitStatus] ?? visit.status}
+                        colorClass={VISIT_STATUS_COLORS[visit.status as VisitStatus] ?? 'bg-gray-100 text-gray-600'}
+                        className="shrink-0"
+                      />
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Warranty Expiry Alert */}
       {expiringWarranty && expiringWarranty.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50/30">
+        <Card className="border-orange-200 bg-orange-50/30 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2 text-orange-700">
               <AlertTriangle className="h-4 w-4" />
@@ -331,7 +373,7 @@ export default async function DashboardPage() {
 
       {/* Low stock widget */}
       {lowStockItems && lowStockItems.length > 0 && (
-        <Card className="border-red-200 bg-red-50/30">
+        <Card className="border-red-200 bg-red-50/30 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center justify-between">
               <span className="flex items-center gap-2 text-red-700">
@@ -363,5 +405,8 @@ export default async function DashboardPage() {
         </Card>
       )}
     </div>
+
+    <QuickCreateFab />
+    </>
   )
 }

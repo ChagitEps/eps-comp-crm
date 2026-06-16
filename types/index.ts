@@ -312,6 +312,8 @@ export interface VisitAttendance {
   visit_type: VisitType | null
   follow_up_needed: boolean
   follow_up_scheduled_at: string | null
+  quote_approved: boolean
+  quote_amount: number | null
   created_at: string
   updated_at: string
 }

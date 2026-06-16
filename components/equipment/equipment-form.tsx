@@ -30,8 +30,11 @@ import {
   createEquipment,
   updateEquipment,
   createEquipmentBatch,
+  linkEquipmentToTicket,
+  linkEquipmentToVisit,
   type EquipmentFormData,
 } from '@/app/actions/equipment'
+import type { VisitEquipmentAction } from '@/types'
 
 const EQUIPMENT_PRESETS = [
   { value: 'דיסק', label: 'דיסק' },
@@ -62,11 +65,21 @@ const STATUS_OPTIONS = (Object.entries(EQUIPMENT_STATUS_LABELS) as [EquipmentSta
   ([value, label]) => ({ value, label })
 )
 
+const VISIT_ACTION_LABELS: Record<VisitEquipmentAction, string> = {
+  installed: 'הותקן',
+  taken:     'נלקח',
+  returned:  'הוחזר',
+  checked:   'נבדק',
+}
+
 interface EquipmentFormProps {
   customerId: string
   equipment?: Equipment
   open: boolean
   onClose: () => void
+  ticketId?: string
+  visitId?: string
+  defaultVisitAction?: VisitEquipmentAction
 }
 
 const EMPTY: EquipmentFormData = {
@@ -89,10 +102,11 @@ const EMPTY: EquipmentFormData = {
   remote_notes: '',
 }
 
-export function EquipmentForm({ customerId, equipment, open, onClose }: EquipmentFormProps) {
+export function EquipmentForm({ customerId, equipment, open, onClose, ticketId, visitId, defaultVisitAction }: EquipmentFormProps) {
   const [isPending, startTransition] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
+  const [visitAction, setVisitAction] = useState<VisitEquipmentAction>(defaultVisitAction ?? 'checked')
 
   // Quick-add: generic presets (multi-select, batch insert)
   const [presetSelection, setPresetSelection] = useState<string[]>([])
@@ -149,6 +163,18 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
 
       if (result?.errors) { setErrors(result.errors); return }
       if (result?.error) { setGlobalError(result.error); return }
+
+      // Link to ticket or visit if provided (new equipment only)
+      if (!equipment && result.id) {
+        if (ticketId) {
+          const linkResult = await linkEquipmentToTicket(result.id, ticketId)
+          if (linkResult?.error) { setGlobalError(linkResult.error); return }
+        } else if (visitId) {
+          const linkResult = await linkEquipmentToVisit(result.id, visitId, visitAction)
+          if (linkResult?.error) { setGlobalError(linkResult.error); return }
+        }
+      }
+
       onClose()
     })
   }
@@ -210,6 +236,23 @@ export function EquipmentForm({ customerId, equipment, open, onClose }: Equipmen
 
               <Separator />
             </>
+          )}
+
+          {/* Visit action — shown only when adding from a visit */}
+          {visitId && !equipment && (
+            <section className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">פעולה שבוצעה</p>
+              <Select value={visitAction} onValueChange={v => setVisitAction((v ?? 'checked') as VisitEquipmentAction)}>
+                <SelectTrigger className="w-full">
+                  <span className="flex-1 text-sm text-start">{VISIT_ACTION_LABELS[visitAction]}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(VISIT_ACTION_LABELS) as [VisitEquipmentAction, string][]).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </section>
           )}
 
           {/* Basic info */}

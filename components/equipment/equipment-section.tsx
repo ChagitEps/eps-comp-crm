@@ -3,12 +3,11 @@
 import { useState, useTransition } from 'react'
 import { Plus, Edit, Trash2, Wifi, Monitor, AlertTriangle, Minus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EquipmentForm } from './equipment-form'
+import { EquipmentStatusSelect } from './equipment-status-select'
 import { softDeleteEquipment, updateEquipmentQuantity } from '@/app/actions/equipment'
-import { EQUIPMENT_STATUS_LABELS } from '@/types'
 import type { Equipment, EquipmentStatus } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -139,9 +138,10 @@ export function EquipmentSection({ customerId, equipment }: EquipmentSectionProp
                       <Plus className="h-3 w-3" />
                     </Button>
                   </div>
-                  <StatusBadge
-                    label={EQUIPMENT_STATUS_LABELS[item.status as EquipmentStatus]}
-                    colorClass={STATUS_COLORS[item.status as EquipmentStatus]}
+                  <EquipmentStatusSelect
+                    equipmentId={item.id}
+                    customerId={customerId}
+                    currentStatus={item.status as EquipmentStatus}
                   />
                   <Button
                     variant="ghost"

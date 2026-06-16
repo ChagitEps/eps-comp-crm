@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { QuoteApprovalButton } from '@/components/visits/quote-approval-button'
 import { CURRENT_DEPARTMENT_LABELS } from '@/types'
 import type { TicketDepartment } from '@/types'
 
@@ -97,6 +98,8 @@ type AttendanceRow = {
   follow_up_scheduled_at: string | null
   started_at: string | null
   ended_at: string | null
+  quote_approved: boolean
+  quote_amount: number | null
   visits: {
     id: string
     ticket_id: string | null
@@ -121,6 +124,89 @@ type OrderRow = {
   order_status: string
 }
 
+type StatItem = { label: string; value: string | number; bg: string; border: string; text: string }
+
+const COLOR_MAP: Record<string, { bg: string; border: string; text: string }> = {
+  indigo:  { bg: 'bg-indigo-50',  border: 'border-indigo-100',  text: 'text-indigo-700'  },
+  purple:  { bg: 'bg-purple-50',  border: 'border-purple-100',  text: 'text-purple-700'  },
+  blue:    { bg: 'bg-blue-50',    border: 'border-blue-100',    text: 'text-blue-700'    },
+  green:   { bg: 'bg-green-50',   border: 'border-green-100',   text: 'text-green-700'   },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-700' },
+  amber:   { bg: 'bg-amber-50',   border: 'border-amber-100',   text: 'text-amber-700'   },
+  orange:  { bg: 'bg-orange-50',  border: 'border-orange-100',  text: 'text-orange-700'  },
+  cyan:    { bg: 'bg-cyan-50',    border: 'border-cyan-100',    text: 'text-cyan-700'    },
+  rose:    { bg: 'bg-rose-50',    border: 'border-rose-100',    text: 'text-rose-700'    },
+  muted:   { bg: 'bg-muted/40',   border: 'border-border',      text: 'text-muted-foreground' },
+}
+
+function computeTabStats(tab: TabKey, rows: AttendanceRow[], orders: OrderRow[]): StatItem[] {
+  function card(label: string, value: string | number, color: string): StatItem {
+    const c = COLOR_MAP[color] ?? COLOR_MAP.muted
+    return { label, value, ...c }
+  }
+
+  switch (tab) {
+    case 'all':
+      return [
+        card('הצעות מחיר', rows.filter(r => r.current_department === 'quote').length, 'indigo'),
+        card('הזמנות',     rows.filter(r => r.current_department === 'order').length, 'purple'),
+        card('ביקורי המשך', rows.filter(r => r.follow_up_needed).length,              'orange'),
+      ]
+
+    case 'quote': {
+      const approved = rows.filter(r => r.quote_approved)
+      const amount   = approved.reduce((s, r) => s + (r.quote_amount ?? 0), 0)
+      return [
+        card('סה״כ הצעות', rows.length,     'indigo'),
+        card('אושרו',       approved.length, 'green'),
+        card('סכום מאושר',  `₪${amount.toLocaleString('he-IL')}`, 'emerald'),
+      ]
+    }
+
+    case 'order': {
+      const installed = orders.filter(o => o.order_status === 'installed').length
+      return [
+        card('מחלקות הזמנה', rows.length,    'purple'),
+        card('פריטים',        orders.length,  'blue'),
+        card('הותקנו',        installed,      'emerald'),
+      ]
+    }
+
+    case 'lab':
+      return [card('סה״כ טיפולים', rows.length, 'amber')]
+
+    case 'delivery':
+      return [card('סה״כ משלוחים', rows.length, 'emerald')]
+
+    case 'technician': {
+      const totalMins = rows.reduce((s, r) => {
+        const start = r.started_at ? new Date(r.started_at).getTime() : 0
+        const end   = r.ended_at   ? new Date(r.ended_at).getTime()   : 0
+        return s + (end > start ? Math.round((end - start) / 60000) : 0)
+      }, 0)
+      return [
+        card('ביקורי טכנאי', rows.length,                         'cyan'),
+        card('שעות עבודה',   `${(totalMins / 60).toFixed(1)}ש׳`, 'blue'),
+      ]
+    }
+
+    case 'billing':
+      return [card('סה״כ חיובים', rows.length, 'rose')]
+
+    case 'follow_up': {
+      const withDate = rows.filter(r => r.follow_up_scheduled_at).length
+      return [
+        card('סה״כ המשכים', rows.length,              'orange'),
+        card('עם תאריך',    withDate,                  'amber'),
+        card('ללא תאריך',   rows.length - withDate,    'muted'),
+      ]
+    }
+
+    default:
+      return [card('סה״כ', rows.length, 'muted')]
+  }
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })
@@ -135,6 +221,7 @@ function getDeptKey(a: AttendanceRow): Exclude<TabKey, 'all'> {
 
 const SELECT = `
   id, current_department, work_done, follow_up_needed, follow_up_scheduled_at, started_at, ended_at,
+  quote_approved, quote_amount,
   visits(
     id, ticket_id,
     technician:technician_id(full_name),
@@ -199,6 +286,8 @@ export default async function CategoriesPage({ searchParams }: PageProps) {
     }
   }
 
+  const stats = computeTabStats(activeTab, attendances, orders)
+
   const filtered = search
     ? attendances.filter(a => {
         const ticket   = a.visits?.ticket
@@ -218,6 +307,18 @@ export default async function CategoriesPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-bold">קטגוריות</h1>
+
+      {/* Per-tab KPI cards */}
+      {stats.length > 0 && (
+        <div className={`grid gap-3 ${stats.length === 1 ? 'grid-cols-1' : stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          {stats.map(card => (
+            <div key={card.label} className={`${card.bg} border ${card.border} rounded-xl px-4 py-3`}>
+              <p className={`text-xs font-medium ${card.text}`}>{card.label}</p>
+              <p className={`text-2xl font-bold ${card.text}`}>{card.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tabs — colored bottom border: always 1px in category color, 3px when active */}
       <div className="flex flex-wrap border-b border-border">
@@ -353,6 +454,17 @@ export default async function CategoriesPage({ searchParams }: PageProps) {
                     {attendance.follow_up_scheduled_at
                       ? `תוזמן ל-${formatDate(attendance.follow_up_scheduled_at)}`
                       : 'ללא תאריך מוגדר'}
+                  </div>
+                )}
+
+                {/* Quote approval */}
+                {(attendance.current_department === 'quote' || (activeTab === 'all' && getDeptKey(attendance) === 'quote')) && (
+                  <div className="border-t border-blue-200 pt-2">
+                    <QuoteApprovalButton
+                      attendanceId={attendance.id}
+                      approved={attendance.quote_approved}
+                      amount={attendance.quote_amount}
+                    />
                   </div>
                 )}
 

@@ -12,6 +12,7 @@ import { AttendanceTypeSelect } from '@/components/visits/attendance-type-select
 import { AddOrderDialog } from '@/components/tickets/add-order-dialog'
 import { FollowUpDialog } from '@/components/visits/follow-up-dialog'
 import { OrderStatusSelect } from '@/components/tickets/order-status-select'
+import { QuoteApprovalButton } from '@/components/visits/quote-approval-button'
 import { startAttendance, endAttendance, deleteAttendance, updateAttendanceText } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -90,6 +91,7 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
   const isCompleted = !!attendance.started_at && !!attendance.ended_at
   const isEmpty     = !attendance.started_at
   const isOrderDept = attendance.current_department === 'order'
+  const isQuoteDept = attendance.current_department === 'quote'
 
   async function handleStart() {
     startStart(async () => {
@@ -287,6 +289,17 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
           />
         </div>
       </div>
+
+      {/* Quote approval — shown only when department = 'quote' */}
+      {isQuoteDept && (
+        <div className="border-t border-border pt-3">
+          <QuoteApprovalButton
+            attendanceId={attendance.id}
+            approved={attendance.quote_approved}
+            amount={attendance.quote_amount}
+          />
+        </div>
+      )}
 
       {/* Orders section — shown only when department = 'order' */}
       {isOrderDept && ticketId && (
