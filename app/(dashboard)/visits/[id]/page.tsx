@@ -25,6 +25,7 @@ import type {
   TicketOrder,
 } from '@/types'
 import { VisitEquipmentSelector } from '@/components/equipment/visit-equipment-selector'
+import { VisitManualCostInput } from '@/components/visits/visit-manual-cost-input'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -265,12 +266,7 @@ export default async function VisitDetailPage({ params }: PageProps) {
               <span>₪{Number(visit.equipment_cost).toLocaleString('he-IL')}</span>
             </div>
           )}
-          {Number(visit.fixed_cost) > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">עלות קבועה</span>
-              <span>₪{Number(visit.fixed_cost).toLocaleString('he-IL')}</span>
-            </div>
-          )}
+          <VisitManualCostInput visitId={id} currentFixedCost={Number(visit.fixed_cost) || 0} />
           <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border">
             <span>סה״כ</span>
             <span className="text-primary">₪{Number(visit.total_cost).toLocaleString('he-IL')}</span>

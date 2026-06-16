@@ -181,6 +181,46 @@ export async function finalizeVisitBilling(
   return { billing: result }
 }
 
+// ── עדכון עלות קבועה ידנית ──────────────────────────────────────────────
+export async function updateVisitFixedCost(
+  visitId: string,
+  amount: number
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'לא מחובר.' }
+
+  const { data: visit } = await supabase
+    .from('visits')
+    .select('work_cost, equipment_cost')
+    .eq('id', visitId)
+    .single()
+
+  if (!visit) return { error: 'ביקור לא נמצא.' }
+
+  const fixedCost  = Math.max(0, Math.round(amount * 100) / 100)
+  const totalCost  = Math.round(((visit.work_cost ?? 0) + (visit.equipment_cost ?? 0) + fixedCost) * 100) / 100
+
+  const { error } = await supabase
+    .from('visits')
+    .update({ fixed_cost: fixedCost, total_cost: totalCost })
+    .eq('id', visitId)
+
+  if (error) return { error: 'שגיאה בעדכון הסכום.' }
+
+  await supabase.from('audit_logs').insert({
+    user_id:     user.id,
+    action:      'fixed_cost_updated',
+    entity_type: 'visit',
+    entity_id:   visitId,
+    after_data:  { fixed_cost: fixedCost, total_cost: totalCost },
+  })
+
+  revalidatePath(`/visits/${visitId}`)
+  revalidatePath('/finance')
+  return {}
+}
+
 // ── עדכון billing_status בלבד ────────────────────────────────────────────
 export async function updateVisitBillingStatus(
   visitId: string,
