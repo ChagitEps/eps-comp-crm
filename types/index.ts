@@ -309,10 +309,19 @@ export interface VisitAttendance {
   ended_at: string | null
   duration_minutes: number | null
   current_department: TicketDepartment
+  visit_type: VisitType | null
   follow_up_needed: boolean
   follow_up_scheduled_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface TechnicianServiceRate {
+  id: string
+  tenant_id: string
+  technician_id: string
+  visit_type: VisitType
+  hourly_rate: number
 }
 
 export interface Equipment {

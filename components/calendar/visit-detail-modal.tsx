@@ -20,11 +20,10 @@ import { Loader2, ExternalLink, User, Clock, Wrench, Navigation } from 'lucide-r
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
-  VISIT_TYPE_LABELS,
   VISIT_STATUS_LABELS,
   VISIT_STATUS_COLORS,
 } from '@/types'
-import type { VisitType, VisitStatus, UserRole } from '@/types'
+import type { VisitStatus, UserRole } from '@/types'
 import { updateVisitStatus, reassignVisitTechnician } from '@/app/actions/visits'
 
 export interface ModalVisit {
@@ -123,7 +122,7 @@ export function VisitDetailModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wrench className="h-4 w-4 text-muted-foreground" />
-            {VISIT_TYPE_LABELS[visit.visit_type as VisitType]}
+            {visit.ticket_title ?? 'ביקור'}
           </DialogTitle>
         </DialogHeader>
 

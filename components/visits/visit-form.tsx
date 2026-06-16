@@ -11,8 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Loader2, Package, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { VISIT_TYPE_LABELS } from '@/types'
-import type { Profile, VisitType, UserRole } from '@/types'
+import type { Profile, UserRole } from '@/types'
 import {
   createVisit, updateVisit, type VisitFormData, type ActionResult,
 } from '@/app/actions/visits'
@@ -33,7 +32,6 @@ interface VisitContext {
 interface ExistingVisit {
   id:               string
   technician_id:    string
-  visit_type:       string
   equipment_cost:   number
 }
 
@@ -45,9 +43,6 @@ interface VisitFormProps {
   warehouseItems?:     WarehousePickerItem[]
   userRole?:           UserRole
 }
-
-const VISIT_TYPE_OPTIONS = (Object.entries(VISIT_TYPE_LABELS) as [VisitType, string][])
-  .map(([value, label]) => ({ value, label }))
 
 export function VisitForm({
   context, technicians, currentTechnicianId, existingVisit,
@@ -64,7 +59,6 @@ export function VisitForm({
   const [form, setForm] = useState<VisitFormData>({
     ticket_id:               context.ticketId,
     technician_id:           existingVisit?.technician_id ?? currentTechnicianId,
-    visit_type:              (existingVisit?.visit_type as VisitType) ?? 'computing',
     equipment_cost:          existingVisit?.equipment_cost?.toString() ?? '0',
     selected_warehouse_items: [],
   })
@@ -84,7 +78,6 @@ export function VisitForm({
   const totalEquipmentCost = warehouseEquipmentCost + customItemsTotal
 
   const selectedTech = technicians.find(t => t.id === form.technician_id)
-  const selectedType = form.visit_type ? VISIT_TYPE_LABELS[form.visit_type as VisitType] : null
 
   function addCustomItem() {
     if (!customItemForm.name.trim() || !customItemForm.price) return
@@ -138,21 +131,6 @@ export function VisitForm({
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">פרטי ביקור</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>סוג ביקור *</Label>
-            <Select value={form.visit_type} onValueChange={v => set('visit_type', v ?? '')}>
-              <SelectTrigger className={cn('w-full', errors.visit_type && 'border-destructive')}>
-                <span className={cn('flex-1 text-sm', !form.visit_type && 'text-muted-foreground')}>
-                  {selectedType ?? 'בחר סוג...'}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {VISIT_TYPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {errors.visit_type && <p className="text-xs text-destructive">{errors.visit_type}</p>}
-          </div>
-
           <div className="space-y-1.5">
             <Label>טכנאי *</Label>
             <Select value={form.technician_id} onValueChange={v => set('technician_id', v ?? '')}>

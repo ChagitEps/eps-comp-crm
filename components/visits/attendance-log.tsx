@@ -8,13 +8,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { AttendanceEditDialog } from '@/components/visits/attendance-edit-dialog'
 import { AttendanceDepartmentSelect } from '@/components/visits/attendance-department-select'
+import { AttendanceTypeSelect } from '@/components/visits/attendance-type-select'
 import { AddOrderDialog } from '@/components/tickets/add-order-dialog'
 import { FollowUpDialog } from '@/components/visits/follow-up-dialog'
 import { OrderStatusSelect } from '@/components/tickets/order-status-select'
 import { startAttendance, endAttendance, deleteAttendance, updateAttendanceText } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { VisitAttendance, UserRole, TicketOrder } from '@/types'
+import type { VisitAttendance, UserRole, TicketOrder, VisitType } from '@/types'
 
 interface AttendanceLogProps {
   attendance: VisitAttendance
@@ -22,6 +23,7 @@ interface AttendanceLogProps {
   userRole: UserRole
   ticketId: string | null
   orders: TicketOrder[]
+  defaultVisitType?: VisitType | null
 }
 
 function formatDuration(minutes: number): string {
@@ -62,7 +64,7 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   )
 }
 
-export function AttendanceLog({ attendance, index, userRole, ticketId, orders }: AttendanceLogProps) {
+export function AttendanceLog({ attendance, index, userRole, ticketId, orders, defaultVisitType }: AttendanceLogProps) {
   const [isPendingStart, startStart] = useTransition()
   const [isPendingEnd, startEnd]     = useTransition()
   const [editOpen, setEditOpen]      = useState(false)
@@ -132,6 +134,11 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders }:
           <AttendanceDepartmentSelect
             attendanceId={attendance.id}
             currentDepartment={attendance.current_department}
+          />
+          <AttendanceTypeSelect
+            attendanceId={attendance.id}
+            currentType={attendance.visit_type}
+            defaultType={defaultVisitType}
           />
         </div>
 

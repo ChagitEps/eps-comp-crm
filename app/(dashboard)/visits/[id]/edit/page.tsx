@@ -70,7 +70,6 @@ export default async function EditVisitPage({ params }: PageProps) {
           existingVisit={{
             id:               visit.id,
             technician_id:    visit.technician_id,
-            visit_type:       visit.visit_type,
             equipment_cost:   visit.equipment_cost ?? 0,
           }}
         />

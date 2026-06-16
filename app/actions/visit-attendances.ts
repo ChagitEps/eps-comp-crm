@@ -6,7 +6,7 @@ import { getTenantId } from '@/lib/supabase/get-tenant'
 import { finalizeVisitBilling } from '@/app/actions/billing'
 import { getFullName, logTicketActivity } from '@/lib/ticket-activity'
 import { CURRENT_DEPARTMENT_LABELS } from '@/types'
-import type { TicketDepartment } from '@/types'
+import type { TicketDepartment, VisitType } from '@/types'
 
 export interface AttendanceActionResult {
   error?: string
@@ -244,6 +244,32 @@ export async function updateAttendanceDepartment(
     })
     revalidatePath(`/tickets/${visit.ticket_id}`)
   }
+
+  revalidatePath(`/visits/${attendance.visit_id}`)
+  return {}
+}
+
+// ── Update the service type of a sub-visit ───────────────────────────────
+export async function updateAttendanceType(
+  attendanceId: string,
+  visitType: VisitType
+): Promise<AttendanceActionResult> {
+  const supabase = await createClient()
+
+  const { data: attendance } = await supabase
+    .from('visit_attendances')
+    .select('visit_id')
+    .eq('id', attendanceId)
+    .single()
+
+  if (!attendance) return { error: 'דיווח הגעה לא נמצא.' }
+
+  const { error } = await supabase
+    .from('visit_attendances')
+    .update({ visit_type: visitType })
+    .eq('id', attendanceId)
+
+  if (error) return { error: 'שגיאה בעדכון סוג השירות.' }
 
   revalidatePath(`/visits/${attendance.visit_id}`)
   return {}

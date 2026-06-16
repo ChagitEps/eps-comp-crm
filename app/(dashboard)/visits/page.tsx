@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Wrench, Clock, Plus } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
-import { VISIT_TYPE_LABELS } from '@/types'
-import type { VisitType, VisitStatus } from '@/types'
+import type { VisitStatus } from '@/types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/shared/empty-state'
 import { VisitStatusSelect } from '@/components/visits/visit-status-select'
@@ -103,8 +102,7 @@ export default async function VisitsPage() {
                     {ticket?.title ?? 'ביקור'}
                   </p>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap mt-0.5">
-                    <span>{VISIT_TYPE_LABELS[visit.visit_type as VisitType]}</span>
-                    {customer && <span>· {customer.business_name ?? customer.name}</span>}
+                    {customer && <span>{customer.business_name ?? customer.name}</span>}
                     {technician && <span>· {technician.full_name}</span>}
                     {visit.start_time && (
                       <span>

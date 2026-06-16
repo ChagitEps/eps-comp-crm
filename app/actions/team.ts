@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getTenantId } from '@/lib/supabase/get-tenant'
 import { triggerInvitationWebhook } from '@/lib/services/webhookService'
 import { USER_ROLE_LABELS } from '@/types'
-import type { UserRole } from '@/types'
+import type { UserRole, VisitType } from '@/types'
 
 export interface TechnicianFormData {
   full_name: string
@@ -210,6 +210,40 @@ export async function toggleTechnicianActive(
     .eq('id', profileId)
 
   if (error) return { error: 'שגיאה בעדכון הסטטוס.' }
+
+  revalidatePath('/settings/team')
+  return {}
+}
+
+// ── Upsert a per-technician rate for a specific service type ─────────────
+export async function upsertServiceRate(
+  technicianId: string,
+  visitType: VisitType,
+  hourlyRate: number | null
+): Promise<ActionResult> {
+  const admin = await assertAdmin()
+  if (!admin) return { error: 'אין הרשאה לבצע פעולה זו.' }
+
+  const [supabase, tenantId] = await Promise.all([createClient(), getTenantId()])
+  if (!tenantId) return { error: 'שגיאה בזיהוי הארגון.' }
+
+  if (hourlyRate === null || isNaN(hourlyRate)) {
+    // Delete the row → will fall back to base hourly_rate
+    await supabase
+      .from('technician_service_rates')
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('technician_id', technicianId)
+      .eq('visit_type', visitType)
+  } else {
+    const { error } = await supabase
+      .from('technician_service_rates')
+      .upsert(
+        { tenant_id: tenantId, technician_id: technicianId, visit_type: visitType, hourly_rate: hourlyRate },
+        { onConflict: 'tenant_id,technician_id,visit_type' }
+      )
+    if (error) return { error: 'שגיאה בשמירת התעריף.' }
+  }
 
   revalidatePath('/settings/team')
   return {}

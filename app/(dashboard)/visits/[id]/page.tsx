@@ -12,12 +12,10 @@ import { CloseVisitDialog } from '@/components/visits/close-visit-dialog'
 import { AttendanceTimeline } from '@/components/visits/attendance-timeline'
 import { VisitStatusSelect } from '@/components/visits/visit-status-select'
 import {
-  VISIT_TYPE_LABELS,
   VISIT_BILLING_STATUS_LABELS,
   VISIT_BILLING_STATUS_COLORS,
 } from '@/types'
 import type {
-  VisitType,
   VisitStatus,
   VisitBillingStatus,
   UserRole,
@@ -145,9 +143,6 @@ export default async function VisitDetailPage({ params }: PageProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold">
-                {VISIT_TYPE_LABELS[visit.visit_type as VisitType]}
-              </span>
               <VisitStatusSelect visitId={id} currentStatus={visit.status as VisitStatus} />
             </div>
             {ticket && (
@@ -280,9 +275,9 @@ export default async function VisitDetailPage({ params }: PageProps) {
             <span>סה״כ</span>
             <span className="text-primary">₪{Number(visit.total_cost).toLocaleString('he-IL')}</span>
           </div>
-          {technician?.hourly_rate && totalBillingMinutes > 0 && Number(visit.work_cost) > 0 && (
+          {totalBillingMinutes > 0 && Number(visit.work_cost) > 0 && (
             <p className="text-xs text-muted-foreground">
-              {formatTotalDuration(totalBillingMinutes)} × ₪{technician.hourly_rate}/שעה
+              {formatTotalDuration(totalBillingMinutes)} · תעריף לפי סוג שירות
             </p>
           )}
         </div>

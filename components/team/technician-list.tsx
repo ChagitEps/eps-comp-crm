@@ -6,16 +6,18 @@ import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TechnicianForm } from './technician-form'
+import { TechnicianRates } from './technician-rates'
 import { toggleTechnicianActive } from '@/app/actions/team'
 import { USER_ROLE_LABELS, USER_ROLE_COLORS } from '@/types'
-import type { Profile, UserRole } from '@/types'
+import type { Profile, UserRole, TechnicianServiceRate } from '@/types'
 
 interface TechnicianListProps {
   technicians: Profile[]
   currentUserId: string
+  serviceRates: TechnicianServiceRate[]
 }
 
-export function TechnicianList({ technicians, currentUserId }: TechnicianListProps) {
+export function TechnicianList({ technicians, currentUserId, serviceRates }: TechnicianListProps) {
   const [editing, setEditing] = useState<Profile | null>(null)
   const [, startTransition] = useTransition()
 
@@ -98,6 +100,11 @@ export function TechnicianList({ technicians, currentUserId }: TechnicianListPro
                   />
                 </div>
               )}
+              <TechnicianRates
+                technicianId={tech.id}
+                baseRate={tech.hourly_rate ?? null}
+                rates={serviceRates.filter(r => r.technician_id === tech.id)}
+              />
             </div>
           )
         })}

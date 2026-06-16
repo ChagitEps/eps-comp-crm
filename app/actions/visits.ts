@@ -7,7 +7,7 @@ import { getTenantId } from '@/lib/supabase/get-tenant'
 import { finalizeVisitBilling } from '@/app/actions/billing'
 import { recalculateVisitTotals } from '@/app/actions/visit-attendances'
 import { updateTicketStatus } from '@/app/actions/tickets'
-import type { VisitType, VisitStatus, TicketStatus } from '@/types'
+import type { VisitStatus, TicketStatus } from '@/types'
 
 export interface SelectedWarehouseItem {
   warehouse_item_id: string
@@ -19,7 +19,6 @@ export interface SelectedWarehouseItem {
 export interface VisitFormData {
   ticket_id: string
   technician_id: string
-  visit_type: VisitType | ''
   equipment_cost: string
   selected_warehouse_items: SelectedWarehouseItem[]
 }
@@ -33,7 +32,6 @@ function validateVisit(data: VisitFormData): Record<string, string> {
   const errors: Record<string, string> = {}
   if (!data.ticket_id) errors.ticket_id = 'קריאה חסרה'
   if (!data.technician_id) errors.technician_id = 'יש לבחור טכנאי'
-  if (!data.visit_type) errors.visit_type = 'יש לבחור סוג ביקור'
   return errors
 }
 
@@ -52,7 +50,7 @@ export async function createVisit(data: VisitFormData): Promise<ActionResult> {
       tenant_id: tenantId,
       ticket_id: data.ticket_id,
       technician_id: data.technician_id,
-      visit_type: data.visit_type || 'computing',
+      visit_type: 'computing',
       status: 'scheduled',
       equipment_cost: equipmentCost,
       total_cost: equipmentCost,
@@ -189,7 +187,6 @@ export async function updateVisit(visitId: string, data: VisitFormData): Promise
     .from('visits')
     .update({
       technician_id: data.technician_id,
-      visit_type: data.visit_type || 'computing',
       equipment_cost: parseFloat(data.equipment_cost) || 0,
     })
     .eq('id', visitId)

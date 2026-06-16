@@ -71,8 +71,28 @@ export async function finalizeVisitBilling(
   const durationHours    = effectiveMinutes / 60
   const fixedCost        = options.fixedCost ?? 0
 
-  // ── 2. חישוב עלות עבודה ──────────────────────────────────────────────
-  const workCost = isContract ? 0 : Math.round(durationHours * hourlyRate * 100) / 100
+  // ── 2. חישוב עלות עבודה לפי תת-ביקור ────────────────────────────────
+  let workCost = 0
+  if (!isContract) {
+    const { data: attendances } = await supabase
+      .from('visit_attendances')
+      .select('duration_minutes, visit_type')
+      .eq('visit_id', visitId)
+
+    const { data: serviceRates } = await supabase
+      .from('technician_service_rates')
+      .select('visit_type, hourly_rate')
+      .eq('technician_id', visit.technician_id)
+
+    for (const att of attendances ?? []) {
+      const mins = att.duration_minutes ?? 0
+      if (mins === 0) continue
+      const rateRow = (serviceRates ?? []).find(r => r.visit_type === att.visit_type)
+      const rate = rateRow?.hourly_rate ?? hourlyRate
+      workCost += (mins / 60) * rate
+    }
+    workCost = Math.round(workCost * 100) / 100
+  }
 
   // ── 3. חישוב עלות ציוד מ-visit_warehouse_items ───────────────────────
   const { data: warehouseItems } = await supabase

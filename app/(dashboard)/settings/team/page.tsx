@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { TeamPageClient } from '@/components/team/team-page-client'
-import type { Profile } from '@/types'
+import type { Profile, TechnicianServiceRate } from '@/types'
 
 export default async function TeamPage() {
   const supabase = await createClient()
@@ -9,7 +9,6 @@ export default async function TeamPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) notFound()
 
-  // Verify admin
   const { data: currentProfile } = await supabase
     .from('profiles')
     .select('role')
@@ -18,16 +17,16 @@ export default async function TeamPage() {
 
   if (currentProfile?.role !== 'admin') notFound()
 
-  // Fetch all profiles in the tenant
-  const { data: technicians } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('full_name')
+  const [{ data: technicians }, { data: serviceRates }] = await Promise.all([
+    supabase.from('profiles').select('*').order('full_name'),
+    supabase.from('technician_service_rates').select('*'),
+  ])
 
   return (
     <TeamPageClient
       technicians={(technicians ?? []) as Profile[]}
       currentUserId={user.id}
+      serviceRates={(serviceRates ?? []) as TechnicianServiceRate[]}
     />
   )
 }

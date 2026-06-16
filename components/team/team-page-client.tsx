@@ -5,14 +5,15 @@ import { UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TechnicianForm } from '@/components/team/technician-form'
 import { TechnicianList } from '@/components/team/technician-list'
-import type { Profile } from '@/types'
+import type { Profile, TechnicianServiceRate } from '@/types'
 
 interface TeamPageClientProps {
   technicians: Profile[]
   currentUserId: string
+  serviceRates: TechnicianServiceRate[]
 }
 
-export function TeamPageClient({ technicians, currentUserId }: TeamPageClientProps) {
+export function TeamPageClient({ technicians, currentUserId, serviceRates }: TeamPageClientProps) {
   const [showInvite, setShowInvite] = useState(false)
 
   const active = technicians.filter((t) => t.is_active)
@@ -36,7 +37,7 @@ export function TeamPageClient({ technicians, currentUserId }: TeamPageClientPro
 
       {/* Active technicians */}
       {active.length > 0 ? (
-        <TechnicianList technicians={active} currentUserId={currentUserId} />
+        <TechnicianList technicians={active} currentUserId={currentUserId} serviceRates={serviceRates} />
       ) : (
         <div className="text-center py-12 border border-dashed border-border rounded-xl">
           <p className="text-sm text-muted-foreground">אין חברי צוות. לחץ &quot;הזמן טכנאי&quot; להוסיף.</p>
@@ -49,7 +50,7 @@ export function TeamPageClient({ technicians, currentUserId }: TeamPageClientPro
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             מושהים ({inactive.length})
           </p>
-          <TechnicianList technicians={inactive} currentUserId={currentUserId} />
+          <TechnicianList technicians={inactive} currentUserId={currentUserId} serviceRates={serviceRates} />
         </div>
       )}
 
