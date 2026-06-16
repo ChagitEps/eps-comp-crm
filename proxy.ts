@@ -67,21 +67,28 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Accountant role: restricted to /finance and billing API routes only
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+  // Load profile once — used for both suspension and role checks
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .single()
 
-    if (profile?.role === 'accountant') {
-      const allowed = ACCOUNTANT_ALLOWED_PREFIXES.some((prefix) =>
-        pathname === prefix || pathname.startsWith(prefix + '/')
-      )
-      if (!allowed) {
-        return NextResponse.redirect(new URL('/finance', request.url))
-      }
+  // Suspended user — force sign out and redirect to login
+  if (profile && profile.is_active === false) {
+    await supabase.auth.signOut()
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('error', 'suspended')
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // Accountant role: restricted to /finance and billing API routes only
+  if (profile?.role === 'accountant') {
+    const allowed = ACCOUNTANT_ALLOWED_PREFIXES.some((prefix) =>
+      pathname === prefix || pathname.startsWith(prefix + '/')
+    )
+    if (!allowed) {
+      return NextResponse.redirect(new URL('/finance', request.url))
     }
   }
 

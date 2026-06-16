@@ -9,6 +9,7 @@ import { TechnicianForm } from './technician-form'
 import { TechnicianRates } from './technician-rates'
 import { toggleTechnicianActive } from '@/app/actions/team'
 import { USER_ROLE_LABELS, USER_ROLE_COLORS } from '@/types'
+import { cn } from '@/lib/utils'
 import type { Profile, UserRole, TechnicianServiceRate } from '@/types'
 
 interface TechnicianListProps {
@@ -33,7 +34,19 @@ export function TechnicianList({ technicians, currentUserId, serviceRates }: Tec
         {technicians.map((tech) => {
           const isSelf = tech.id === currentUserId
           return (
-            <div key={tech.id} className="border border-border rounded-xl bg-card overflow-hidden flex flex-col">
+            <div key={tech.id} className={cn(
+              'border rounded-xl overflow-hidden flex flex-col',
+              tech.is_active
+                ? 'border-border bg-card'
+                : 'border-orange-200 bg-orange-50/40 opacity-70'
+            )}>
+              {/* Suspended banner */}
+              {!tech.is_active && (
+                <div className="bg-orange-100 border-b border-orange-200 px-4 py-1.5 flex items-center gap-2">
+                  <span className="text-xs font-medium text-orange-700">⛔ משתמש מושהה — אין גישה למערכת</span>
+                </div>
+              )}
+
               {/* Info row */}
               <div className="flex items-center gap-3 p-4">
                 {/* Avatar */}
