@@ -563,7 +563,7 @@ export const TICKET_ACTIVITY_ICONS: Record<TicketActivityActionType, LucideIcon>
 }
 
 export const VISIT_TYPE_LABELS: Record<VisitType, string> = {
-  computing: 'מחשוב',
+  computing: 'ביקור פיזי',
   infrastructure: 'תשתיות',
   servers: 'שרתים',
   lab: 'מעבדה',
