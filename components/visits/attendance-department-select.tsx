@@ -17,11 +17,12 @@ import { updateAttendanceDepartment } from '@/app/actions/visit-attendances'
 interface AttendanceDepartmentSelectProps {
   attendanceId: string
   currentDepartment: TicketDepartment
+  triggerClassName?: string
 }
 
 const DEPARTMENT_OPTIONS = Object.entries(CURRENT_DEPARTMENT_LABELS) as [TicketDepartment, string][]
 
-export function AttendanceDepartmentSelect({ attendanceId, currentDepartment }: AttendanceDepartmentSelectProps) {
+export function AttendanceDepartmentSelect({ attendanceId, currentDepartment, triggerClassName }: AttendanceDepartmentSelectProps) {
   const [isPending, startTransition] = useTransition()
 
   function handleChange(value: string | null) {
@@ -40,7 +41,7 @@ export function AttendanceDepartmentSelect({ attendanceId, currentDepartment }: 
     <div className="flex items-center gap-1.5">
       {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       <Select value={currentDepartment} onValueChange={handleChange}>
-        <SelectTrigger className="w-32 h-7 text-xs">
+        <SelectTrigger className={triggerClassName ?? 'w-32 h-7 text-xs'}>
           <span className={cn(
             'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
             CURRENT_DEPARTMENT_COLORS[currentDepartment]

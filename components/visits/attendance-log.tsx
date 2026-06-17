@@ -16,17 +16,8 @@ import { QuoteApprovalButton } from '@/components/visits/quote-approval-button'
 import { startAttendance, endAttendance, deleteAttendance, updateAttendanceText } from '@/app/actions/visit-attendances'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { VISIT_TYPE_LABELS } from '@/types'
 import type { VisitAttendance, UserRole, TicketOrder, VisitType } from '@/types'
 
-const TYPE_COLORS: Record<string, string> = {
-  computing:      'bg-blue-100 text-blue-700',
-  remote:         'bg-purple-100 text-purple-700',
-  emergency:      'bg-red-100 text-red-700',
-  infrastructure: 'bg-orange-100 text-orange-700',
-  servers:        'bg-slate-100 text-slate-700',
-  lab:            'bg-teal-100 text-teal-700',
-}
 
 interface AttendanceLogProps {
   attendance: VisitAttendance
@@ -163,9 +154,11 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
             )}
           </div>
 
-          <AttendanceDepartmentSelect
+          <AttendanceTypeSelect
             attendanceId={attendance.id}
-            currentDepartment={attendance.current_department}
+            currentType={attendance.visit_type}
+            defaultType={defaultVisitType}
+            compact
           />
         </div>
 
@@ -179,12 +172,6 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
             </span>
           )}
 
-          {/* Visit type chip */}
-          {attendance.visit_type && (isRunning || isCompleted) && (
-            <span className={cn('hidden sm:inline-flex text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
-              {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
-            </span>
-          )}
 
           {/* Follow-up */}
           <Button
@@ -235,15 +222,13 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
       {/* ── Body ── */}
       <div className="px-4 pb-4 space-y-3">
 
-        {/* ── Empty: choose type + start ── */}
+        {/* ── Empty: choose department + start ── */}
         {isEmpty && (
           <div className="flex items-center gap-3 pt-3">
-            <AttendanceTypeSelect
+            <AttendanceDepartmentSelect
               attendanceId={attendance.id}
-              currentType={attendance.visit_type}
-              defaultType={defaultVisitType}
+              currentDepartment={attendance.current_department}
               triggerClassName="h-9 text-sm border flex-1 min-w-0 px-3 bg-background"
-              placeholder="בחר סוג שירות..."
             />
             <Button
               size="sm"
@@ -281,20 +266,13 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
           </div>
         )}
 
-        {/* ── Completed: mobile chips ── */}
-        {isCompleted && (
-          <div className="flex sm:hidden flex-wrap gap-1.5 pt-1">
-            {attendance.duration_minutes != null && (
-              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-                <Clock className="h-3 w-3" />
-                {formatDuration(attendance.duration_minutes)}
-              </span>
-            )}
-            {attendance.visit_type && (
-              <span className={cn('text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
-                {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
-              </span>
-            )}
+        {/* ── Completed: mobile duration chip ── */}
+        {isCompleted && attendance.duration_minutes != null && (
+          <div className="flex sm:hidden pt-1">
+            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+              <Clock className="h-3 w-3" />
+              {formatDuration(attendance.duration_minutes)}
+            </span>
           </div>
         )}
 
