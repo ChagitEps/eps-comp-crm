@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
-import { Play, Square, Pencil, Trash2, Clock, Plus, ShoppingCart, CalendarClock } from 'lucide-react'
+import { Play, Square, Pencil, Trash2, Clock, Plus, ShoppingCart, CalendarClock, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -49,7 +49,7 @@ function formatTime(iso: string): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })
 }
 
 function LiveTimer({ startedAt }: { startedAt: string }) {
@@ -68,7 +68,7 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   const s = elapsed % 60
 
   return (
-    <span className="font-mono tabular-nums text-lg font-bold text-blue-600">
+    <span className="font-mono tabular-nums text-3xl font-bold text-blue-600 tracking-tight">
       {h > 0 && `${h}:`}
       {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
     </span>
@@ -79,8 +79,9 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
   const [isPendingStart, startStart] = useTransition()
   const [isPendingEnd, startEnd]     = useTransition()
   const [editOpen, setEditOpen]      = useState(false)
-  const [orderDialogOpen, setOrderDialogOpen]   = useState(false)
+  const [orderDialogOpen, setOrderDialogOpen]       = useState(false)
   const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false)
+  const [notesExpanded, setNotesExpanded]           = useState(false)
 
   const [workDone, setWorkDone]           = useState(attendance.work_done ?? '')
   const [internalNotes, setInternalNotes] = useState(attendance.internal_notes ?? '')
@@ -126,32 +127,66 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
 
   return (
     <div className={cn(
-      'rounded-xl border p-4 space-y-3 transition-colors',
-      isRunning ? 'border-blue-300 bg-blue-50/40' : 'border-border bg-card'
+      'rounded-xl border-r-4 border border-border bg-card overflow-hidden transition-all duration-200',
+      isRunning   ? 'border-r-blue-500 shadow-md shadow-blue-100' :
+      isCompleted ? 'border-r-emerald-500' :
+                    'border-r-gray-200'
     )}>
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+
+      {/* ── Header ── */}
+      <div className={cn(
+        'flex items-center justify-between gap-3 px-4 py-3',
+        isRunning ? 'bg-blue-50/60' : isCompleted ? 'bg-emerald-50/30' : 'bg-muted/20'
+      )}>
+        {/* Left: index + date/label + dept */}
+        <div className="flex items-center gap-2.5 min-w-0">
           <span className={cn(
-            'flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0',
-            isRunning   ? 'bg-blue-500 text-white' :
-            isCompleted ? 'bg-emerald-500 text-white' :
-                          'bg-muted text-muted-foreground'
+            'flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0 ring-2',
+            isRunning   ? 'bg-blue-500 text-white ring-blue-200' :
+            isCompleted ? 'bg-emerald-500 text-white ring-emerald-100' :
+                          'bg-muted text-muted-foreground ring-border'
           )}>
             {index}
           </span>
-          <span className="text-sm font-semibold">
-            {isCompleted && attendance.started_at ? formatDate(attendance.started_at) : 'הגעה חדשה'}
-          </span>
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight">
+              {isCompleted && attendance.started_at
+                ? formatDate(attendance.started_at)
+                : isRunning ? 'בתהליך...'
+                : 'הגעה חדשה'}
+            </p>
+            {isCompleted && attendance.started_at && attendance.ended_at && (
+              <p className="text-xs text-muted-foreground font-mono leading-tight" dir="ltr">
+                {formatTime(attendance.started_at)} — {formatTime(attendance.ended_at)}
+              </p>
+            )}
+          </div>
+
           <AttendanceDepartmentSelect
             attendanceId={attendance.id}
             currentDepartment={attendance.current_department}
           />
         </div>
 
-        {/* Action buttons */}
+        {/* Right: chips + actions */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Follow-up button */}
+          {/* Duration chip */}
+          {isCompleted && attendance.duration_minutes != null && (
+            <span className="hidden sm:inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+              <Clock className="h-3 w-3" />
+              {formatDuration(attendance.duration_minutes)}
+            </span>
+          )}
+
+          {/* Visit type chip */}
+          {attendance.visit_type && (isRunning || isCompleted) && (
+            <span className={cn('hidden sm:inline-flex text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
+              {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
+            </span>
+          )}
+
+          {/* Follow-up */}
           <Button
             variant={attendance.follow_up_needed ? 'default' : 'ghost'}
             size="sm"
@@ -159,13 +194,13 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
               'h-7 px-2 text-xs gap-1',
               attendance.follow_up_needed
                 ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground hover:text-orange-600'
             )}
             onClick={() => setFollowUpDialogOpen(true)}
             title="ביקור המשך"
           >
             <CalendarClock className="h-3.5 w-3.5" />
-            {attendance.follow_up_needed ? 'ביקור המשך' : ''}
+            {attendance.follow_up_needed && <span className="hidden sm:inline">המשך</span>}
           </Button>
 
           <Button
@@ -176,6 +211,7 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
+
           {userRole === 'admin' && (
             <ConfirmDialog
               trigger={
@@ -184,7 +220,7 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
                 </button>
               }
               title="מחיקת הגעה"
-              description={`האם למחוק את הגעה #${index}? הפעולה תעדכן את סיכום שעות הביקור.`}
+              description={`האם למחוק את הגעה #${index}?`}
               confirmLabel="מחק"
               onConfirm={async () => {
                 const result = await deleteAttendance(attendance.id)
@@ -196,176 +232,190 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
         </div>
       </div>
 
-      {/* State-specific content */}
-      {isEmpty && (
-        <div className="flex items-center gap-3 pt-1">
-          <AttendanceTypeSelect
-            attendanceId={attendance.id}
-            currentType={attendance.visit_type}
-            defaultType={defaultVisitType}
-            triggerClassName="h-9 text-sm border flex-1 min-w-0 px-3 bg-background"
-            placeholder="בחר סוג שירות..."
-          />
-          <Button
-            size="sm"
-            className="gap-1.5 h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-            onClick={handleStart}
-            disabled={isPendingStart}
-          >
-            <Play className="h-3.5 w-3.5" />
-            התחל
-          </Button>
-        </div>
-      )}
+      {/* ── Body ── */}
+      <div className="px-4 pb-4 space-y-3">
 
-      {isRunning && attendance.started_at && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Clock className="h-4 w-4 text-blue-500 animate-pulse shrink-0" />
-            <LiveTimer startedAt={attendance.started_at} />
-            <span className="text-xs text-muted-foreground">מאז {formatTime(attendance.started_at)}</span>
+        {/* ── Empty: choose type + start ── */}
+        {isEmpty && (
+          <div className="flex items-center gap-3 pt-3">
+            <AttendanceTypeSelect
+              attendanceId={attendance.id}
+              currentType={attendance.visit_type}
+              defaultType={defaultVisitType}
+              triggerClassName="h-9 text-sm border flex-1 min-w-0 px-3 bg-background"
+              placeholder="בחר סוג שירות..."
+            />
+            <Button
+              size="sm"
+              className="gap-1.5 h-9 px-5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+              onClick={handleStart}
+              disabled={isPendingStart}
+            >
+              <Play className="h-3.5 w-3.5" />
+              התחל
+            </Button>
+          </div>
+        )}
+
+        {/* ── Running: big timer ── */}
+        {isRunning && attendance.started_at && (
+          <div className="pt-3 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+              </span>
+              <LiveTimer startedAt={attendance.started_at} />
+              <span className="text-xs text-muted-foreground">מאז {formatTime(attendance.started_at)}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="gap-2 px-6"
+              onClick={handleEnd}
+              disabled={isPendingEnd}
+            >
+              <Square className="h-3.5 w-3.5" />
+              עצור טיימר
+            </Button>
+          </div>
+        )}
+
+        {/* ── Completed: mobile chips ── */}
+        {isCompleted && (
+          <div className="flex sm:hidden flex-wrap gap-1.5 pt-1">
+            {attendance.duration_minutes != null && (
+              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                <Clock className="h-3 w-3" />
+                {formatDuration(attendance.duration_minutes)}
+              </span>
+            )}
             {attendance.visit_type && (
               <span className={cn('text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
                 {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
               </span>
             )}
           </div>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="gap-1.5"
-            onClick={handleEnd}
-            disabled={isPendingEnd}
-          >
-            <Square className="h-3.5 w-3.5" />
-            עצור
-          </Button>
-        </div>
-      )}
+        )}
 
-      {isCompleted && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-          {attendance.started_at && attendance.ended_at && (
-            <span dir="ltr" className="font-mono">
-              {formatTime(attendance.started_at)} → {formatTime(attendance.ended_at)}
-            </span>
-          )}
-          {attendance.duration_minutes != null && (
-            <span className="inline-flex items-center gap-1 bg-muted rounded-md px-2 py-0.5 text-xs font-medium text-foreground">
-              <Clock className="h-3 w-3" />
-              {formatDuration(attendance.duration_minutes)}
-            </span>
-          )}
-          {attendance.visit_type && (
-            <span className={cn('text-xs font-medium rounded-full px-2 py-0.5', TYPE_COLORS[attendance.visit_type] ?? 'bg-muted text-muted-foreground')}>
-              {VISIT_TYPE_LABELS[attendance.visit_type as VisitType]}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Work done / internal notes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border pt-3 mt-1">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">מה נעשה בהגעה זו</Label>
+        {/* ── Work done ── */}
+        <div className="space-y-1.5 pt-1">
+          <Label className="text-xs font-medium text-muted-foreground">מה נעשה בהגעה זו</Label>
           <Textarea
             rows={2}
             placeholder="תאר את העבודה שבוצעה..."
             value={workDone}
             onChange={e => setWorkDone(e.target.value)}
             onBlur={handleWorkDoneBlur}
-            className="text-sm resize-none"
+            className="text-sm resize-none bg-background border-border focus:ring-1 focus:ring-primary/30"
           />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">הערות פנימיות</Label>
-          <Textarea
-            rows={2}
-            placeholder="הערות טכניות, תזכורות..."
-            value={internalNotes}
-            onChange={e => setInternalNotes(e.target.value)}
-            onBlur={handleInternalNotesBlur}
-            className="text-sm resize-none"
-          />
-        </div>
-      </div>
 
-      {/* Quote approval — shown only when department = 'quote' */}
-      {isQuoteDept && (
-        <div className="border-t border-border pt-3">
-          <QuoteApprovalButton
-            attendanceId={attendance.id}
-            approved={attendance.quote_approved}
-            amount={attendance.quote_amount}
-          />
-        </div>
-      )}
-
-      {/* Orders section — shown only when department = 'order' */}
-      {isOrderDept && ticketId && (
-        <div className="border-t border-border pt-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <ShoppingCart className="h-3.5 w-3.5" />
-              פריטים להזמנה
-              {orders.length > 0 && <span className="text-foreground">({orders.length})</span>}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 text-xs gap-1 px-2"
-              onClick={() => setOrderDialogOpen(true)}
-            >
-              <Plus className="h-3 w-3" />
-              הוסף פריט
-            </Button>
-          </div>
-
-          {orders.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-2">
-              אין פריטים עדיין — לחץ &quot;הוסף פריט&quot; כדי להוסיף
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {orders.map(order => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between gap-2 text-xs bg-muted/50 rounded-lg px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium">{order.item_name}</span>
-                    {order.quantity > 1 && (
-                      <span className="text-muted-foreground mr-1.5">×{order.quantity}</span>
-                    )}
-                    {order.supplier && (
-                      <span className="text-muted-foreground mr-1.5">· {order.supplier}</span>
-                    )}
-                    {order.estimated_price != null && (
-                      <span className="text-muted-foreground">· ₪{order.estimated_price}</span>
-                    )}
-                    {order.notes && (
-                      <p className="text-muted-foreground/70 mt-0.5 truncate">{order.notes}</p>
-                    )}
-                  </div>
-                  <OrderStatusSelect
-                    orderId={order.id}
-                    ticketId={ticketId}
-                    currentStatus={order.order_status}
-                  />
-                </div>
-              ))}
-            </div>
+        {/* ── Internal notes (collapsible) ── */}
+        <div>
+          <button
+            onClick={() => setNotesExpanded(p => !p)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {notesExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            הערות פנימיות
+            {internalNotes && !notesExpanded && (
+              <span className="mr-1 text-xs bg-muted rounded px-1.5 py-0.5 text-foreground">יש תוכן</span>
+            )}
+          </button>
+          {notesExpanded && (
+            <Textarea
+              rows={2}
+              placeholder="הערות טכניות, תזכורות..."
+              value={internalNotes}
+              onChange={e => setInternalNotes(e.target.value)}
+              onBlur={handleInternalNotesBlur}
+              className="text-sm resize-none mt-1.5 bg-muted/30 border-dashed"
+            />
           )}
         </div>
-      )}
 
+        {/* ── Quote approval ── */}
+        {isQuoteDept && (
+          <div className="border-t border-blue-100 pt-3 bg-blue-50/40 -mx-4 px-4 pb-1 mt-2 rounded-b">
+            <QuoteApprovalButton
+              attendanceId={attendance.id}
+              approved={attendance.quote_approved}
+              amount={attendance.quote_amount}
+            />
+          </div>
+        )}
+
+        {/* ── Orders ── */}
+        {isOrderDept && ticketId && (
+          <div className="border-t border-purple-100 pt-3 -mx-4 px-4 space-y-2 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-purple-700 flex items-center gap-1.5">
+                <ShoppingCart className="h-3.5 w-3.5" />
+                פריטים להזמנה
+                {orders.length > 0 && (
+                  <span className="bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5 text-xs font-bold">
+                    {orders.length}
+                  </span>
+                )}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs gap-1 px-2 border-purple-200 text-purple-700 hover:bg-purple-50"
+                onClick={() => setOrderDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3" />
+                הוסף פריט
+              </Button>
+            </div>
+
+            {orders.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                אין פריטים עדיין
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {orders.map(order => (
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between gap-2 text-xs bg-purple-50/60 border border-purple-100 rounded-lg px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-purple-900">{order.item_name}</span>
+                      {order.quantity > 1 && (
+                        <span className="text-muted-foreground mr-1.5">×{order.quantity}</span>
+                      )}
+                      {order.supplier && (
+                        <span className="text-muted-foreground mr-1.5">· {order.supplier}</span>
+                      )}
+                      {order.estimated_price != null && (
+                        <span className="text-muted-foreground">· ₪{order.estimated_price}</span>
+                      )}
+                      {order.notes && (
+                        <p className="text-muted-foreground/70 mt-0.5 truncate">{order.notes}</p>
+                      )}
+                    </div>
+                    <OrderStatusSelect
+                      orderId={order.id}
+                      ticketId={ticketId}
+                      currentStatus={order.order_status}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Dialogs */}
       <AttendanceEditDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         attendance={attendance}
         index={index}
       />
-
       {ticketId && (
         <AddOrderDialog
           open={orderDialogOpen}
@@ -374,7 +424,6 @@ export function AttendanceLog({ attendance, index, userRole, ticketId, orders, d
           attendanceId={attendance.id}
         />
       )}
-
       <FollowUpDialog
         open={followUpDialogOpen}
         onOpenChange={setFollowUpDialogOpen}
